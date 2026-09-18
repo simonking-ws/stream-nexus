@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>SSE 推送测试</title>
+    <style>
+        body { font-family: -apple-system, "Microsoft YaHei", sans-serif; margin: 24px; color: #222; }
+        .row { margin-bottom: 12px; }
+        input { padding: 6px 8px; width: 320px; }
+        button { padding: 6px 14px; cursor: pointer; }
+        #status { font-weight: 600; }
+        .on { color: #1a7f37; }
+        .off { color: #b42318; }
+        #log { border: 1px solid #ddd; padding: 8px; height: 340px; overflow: auto; font-family: Consolas, monospace; font-size: 12px; }
+        .line { border-bottom: 1px dashed #eee; padding: 3px 0; }
+        .muted { color: #888; }
+    </style>
+</head>
+<body>
+<h3>SSE 推送测试</h3>
+
+<div class="row">
+    <label>订阅业务模块：<input id="modules" value="lot"></label>
+    <span class="muted">多个用逗号分隔，如 lot,order；需与推送侧 bizModule 完全一致</span>
+</div>
+<div class="row">
+    <button onclick="connect()">连接</button>
+    <button onclick="disconnect()">断开</button>
+    <span>状态：<span id="status" class="off">未连接</span></span>
+    <span class="muted">clientId：<span id="clientId">-</span></span>
+</div>
+
+<div class="row">
+    <label>业务模块：<input id="bizModule" value="lot" style="width:120px"></label>
+    <label>动作：<input id="action" value="bid" style="width:120px"></label>
+    <label>定向 clientId（可选）：<input id="targetClientId" placeholder="留空=按模块广播" style="width:260px"></label>
+</div>
+<div class="row">
+    <button onclick="push()">推送（需 X-Sse-AppId / X-Sse-Key）</button>
+    <span class="muted">appId: auction-core / key: auction-core-secret</span>
+</div>
+
+<div id="log"></div>
+
+<script>
+let es = null;
+let clientId = null;
+let lastTs = {};      // 按 bizModule:action 记录已处理的最大 ts，用于丢弃乱序消息
+
+// 协议常量：与服务端 SseConstants / EventEnum 一一对应，协议值改动需两端同步
+const SYS_MODULE = 'sse';   // 系统消息模块，业务路由不匹配即忽略
+const EVT_MESSAGE = 'MESSAGE';
+const EVT_PING = 'PING';
+const EVT_PONG = 'PONG';
+
+const bizRoutes = {
+    'lot:bid': m => `出价：${JSON.stringify(m.data)}`,
+    'order:create': m => `订单：${JSON.stringify(m.data)}`
+};
+
+function log(text, muted) {
+    const div = document.createElement('div');
+    div.className = 'line' + (muted ? ' muted' : '');
+    div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+    document.getElementById('log').prepend(div);
+}
+
+function connect() {
+    if (es) return;
+    clientId = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
+    document.getElementById('clientId').textContent = clientId;
+    const modules = document.getElementById('modules').value;
+
+    es = new EventSource(`/sse/subscribe?clientId=${encodeURIComponent(clientId)}&modules=${encodeURIComponent(modules)}`);
+
+    es.onopen = () => {
+        document.getElementById('status').textContent = '已连接';
+        document.getElementById('status').className = 'on';
+        log('连接建立，请在真实业务中重新拉取全量状态');
+    };
+
+    es.onerror = () => {
+        document.getElementById('status').textContent = '重连中';
+        document.getElementById('status').className = 'off';
+    };
+
+    // 业务消息（建连消息 sse/connected 也走这里）
+    es.addEventListener(EVT_MESSAGE, e => {
+        const m = JSON.parse(e.data);
+        if (m.bizModule === SYS_MODULE) {
+            log('收到建连消息：' + JSON.stringify(m.data), true);
+            return;
+        }
+        const key = `${m.bizModule}:${m.action}`;
+        if (m.ts <= (lastTs[key] || 0)) return;   // 丢弃乱序 / 旧消息
+        lastTs[key] = m.ts;
+        const render = bizRoutes[key];
+        log(`${key} ${render ? render(m) : JSON.stringify(m.data)}`);
+    });
+
+    // 心跳：服务端每 15s 下发一次 PING，收到立即回 PONG；
+    // 不回会被判定失联（默认 90s）并回收连接
+    es.addEventListener(EVT_PING, () => pong());
+}
+
+function pong() {
+    fetch(`/sse/pong?clientId=${encodeURIComponent(clientId)}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({event: EVT_PONG, ts: Date.now()})
+    });
+}
+
+function disconnect() {
+    if (!es) return;
+    es.close();
+    es = null;
+    document.getElementById('status').textContent = '已断开';
+    document.getElementById('status').className = 'off';
+}
+
+function push() {
+    const body = {
+        bizModule: document.getElementById('bizModule').value,
+        action: document.getElementById('action').value,
+        data: {itemId: 'L123', currentPrice: Math.floor(Math.random() * 9000) + 1000, ts: Date.now()}
+    };
+    const targetClientId = document.getElementById('targetClientId').value.trim();
+    if (targetClientId) {
+        body.clientIds = [targetClientId];   // 定向推送（与按模块广播取并集）
+    }
+    fetch('/sse/push', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Sse-AppId': 'auction-core',
+            'X-Sse-Key': 'auction-core-secret'
+        },
+        body: JSON.stringify(body)
+    }).then(r => r.json()).then(r => log('推送结果：' + JSON.stringify(r), true));
+}
+</script>
+</body>
+</html>
