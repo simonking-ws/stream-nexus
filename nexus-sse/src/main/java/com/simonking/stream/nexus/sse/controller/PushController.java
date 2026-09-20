@@ -3,7 +3,7 @@ package com.simonking.stream.nexus.sse.controller;
 import com.simonking.stream.nexus.common.constant.SseConstants;
 import com.simonking.stream.nexus.common.model.PushRequest;
 import com.simonking.stream.nexus.common.model.PushResult;
-import com.simonking.stream.nexus.sse.config.SseProperties;
+import com.simonking.stream.nexus.sse.auth.PushAppRegistry;
 import com.simonking.stream.nexus.sse.core.SsePusher;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +30,7 @@ public class PushController {
 
     private final SsePusher pusher;
 
-    private final SseProperties properties;
+    private final PushAppRegistry appRegistry;
 
     /**
      * 推送：按业务模块广播、按客户端定向，或两者同时指定
@@ -54,7 +54,7 @@ public class PushController {
      * 业务模块白名单校验：限制该密钥可推送的模块范围
      */
     private void checkModulePermission(List<String> allowed, String bizModule) {
-        if (!properties.isAuthEnabled() || allowed == null || !StringUtils.hasText(bizModule)) {
+        if (!appRegistry.isAuthEnabled() || allowed == null || !StringUtils.hasText(bizModule)) {
             return;
         }
         if (allowed.contains(SseConstants.MODULE_WILDCARD)) {

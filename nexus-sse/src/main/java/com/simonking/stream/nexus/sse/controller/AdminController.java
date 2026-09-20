@@ -1,20 +1,31 @@
 package com.simonking.stream.nexus.sse.controller;
 
+import com.simonking.stream.nexus.sse.auth.PushApp;
+import com.simonking.stream.nexus.sse.auth.PushAppRegistry;
+import com.simonking.stream.nexus.sse.config.SseProperties;
 import com.simonking.stream.nexus.sse.connection.SseClient;
 import com.simonking.stream.nexus.sse.connection.SseClientRegistry;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
- * 连接运维接口
+ * 连接运维接口（供 {@code /admin.html} 管理页使用）
+ *
+ * <p>只做两件事：看全量连接的实时状态、强制下线某条连接。
  *
  * @author simonking
  */
@@ -25,23 +36,86 @@ public class AdminController {
 
     private final SseClientRegistry registry;
 
+    private final PushAppRegistry appRegistry;
+
+    private final SseProperties properties;
+
     /**
-     * 连接与业务模块概览
+     * 推送应用列表（管理页的应用台账 / 测试页的下拉数据源）
+     *
+     * <p>返回明文 apiKey 是有意为之：测试页要靠它拼鉴权头。
+     * 代价是「拿到这个接口就拿到全部推送权限」，见文档 E15——该接口必须内网隔离。
      */
-    @GetMapping("/connections")
-    public Map<String, Object> connections() {
-        List<Map<String, Object>> items = registry.all().stream()
-                .map(this::toView)
-                .toList();
+    @GetMapping("/apps")
+    public Map<String, Object> apps() {
+        List<PushApp> items = appRegistry.list();
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("total", registry.size());
-        result.put("modules", registry.moduleStats());
+        result.put("total", items.size());
+        result.put("authEnabled", appRegistry.isAuthEnabled());
+        result.put("defaultAppId", PushAppRegistry.DEFAULT_APP_ID);
         result.put("items", items);
         return result;
     }
 
     /**
-     * 强制下线
+     * 生成一个随机器 apiKey（GUID），供管理页「自动生成」按钮使用
+     */
+    @GetMapping("/apps/generate-key")
+    public Map<String, Object> generateKey() {
+        return Map.of("apiKey", UUID.randomUUID().toString());
+    }
+
+    /**
+     * 新增应用：同名已存在时拒绝（避免手滑覆盖线上凭证，覆盖请先删除）
+     *
+     * <p>{@code apiKey} 留空则由服务端生成 GUID，避免人工起弱口令。
+     */
+    @PostMapping("/apps")
+    public Map<String, Object> addApp(@RequestBody AppRequest body) {
+        if (body == null || !StringUtils.hasText(body.appId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "appId is required");
+        }
+        String appId = body.appId().trim();
+        if (appRegistry.contains(appId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "appId already exists: " + appId);
+        }
+        String apiKey = StringUtils.hasText(body.apiKey()) ? body.apiKey().trim() : UUID.randomUUID().toString();
+        appRegistry.save(new PushApp(appId, apiKey, PushAppRegistry.normalize(body.allowedModules())));
+        return Map.of("ok", true, "appId", appId, "apiKey", apiKey);
+    }
+
+    /**
+     * 删除应用：立即生效，该 appId 之后的推送一律 401
+     */
+    @DeleteMapping("/apps/{appId}")
+    public Map<String, Object> removeApp(@PathVariable String appId) {
+        boolean removed = appRegistry.remove(appId);
+        return Map.of("ok", true, "appId", appId, "removed", removed);
+    }
+
+    /**
+     * 连接与业务模块概览
+     *
+     * <p>额外下发 {@code serverTime} 与 {@code heartbeatTimeout}：管理页据此算「静默时长」和
+     * 「疑似失联」，避免依赖浏览器本机时钟（与服务端有偏差时心跳判读会失真）。
+     */
+    @GetMapping("/connections")
+    public Map<String, Object> connections() {
+        long now = System.currentTimeMillis();
+        List<Map<String, Object>> items = registry.all().stream()
+                .map(client -> toView(client, now))
+                .toList();
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total", registry.size());
+        result.put("modules", registry.moduleStats());
+        result.put("serverTime", now);
+        result.put("heartbeatTimeout", properties.getHeartbeatTimeout().toMillis());
+        result.put("items", items);
+        return result;
+    }
+
+    /**
+     * 强制下线：走统一回收入口，连接主表与模块索引一起清理
      */
     @DeleteMapping("/connections/{clientId}")
     public Map<String, Object> kick(@PathVariable String clientId) {
@@ -49,12 +123,23 @@ public class AdminController {
         return Map.of("ok", true, "clientId", clientId);
     }
 
-    private Map<String, Object> toView(SseClient client) {
+    /**
+     * 新增应用的请求体：{@code allowedModules} 留空 = 不限制模块
+     */
+    public record AppRequest(String appId, String apiKey, List<String> allowedModules) {
+    }
+
+    private Map<String, Object> toView(SseClient client, long now) {
+        // 时钟回拨 / 刚建连时可能算出负数，归零
+        long silence = Math.max(now - client.getLastPongTime(), 0);
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("clientId", client.getClientId());
         view.put("modules", client.getModules());
         view.put("createTime", client.getCreateTime());
         view.put("lastPongTime", client.getLastPongTime());
+        view.put("online", Math.max(now - client.getCreateTime(), 0));
+        view.put("silence", silence);
+        view.put("stale", silence > properties.getHeartbeatTimeout().toMillis());
         return view;
     }
 }

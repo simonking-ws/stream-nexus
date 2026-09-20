@@ -1,13 +1,13 @@
 package com.simonking.stream.nexus.sse.auth;
 
 import com.simonking.stream.nexus.common.constant.SseConstants;
-import com.simonking.stream.nexus.sse.config.SseProperties;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.nio.charset.StandardCharsets;
@@ -29,11 +29,15 @@ import java.security.MessageDigest;
 @RequiredArgsConstructor
 public class PushAuthInterceptor implements HandlerInterceptor {
 
-    private final SseProperties properties;
+    private final PushAppRegistry appRegistry;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        if (!properties.isAuthEnabled()) {
+        // 预检 OPTIONS 不带鉴权头，放行交给跨域处理短路返回；否则浏览器侧跨域推送会被 401 挡掉
+        if (CorsUtils.isPreFlightRequest(request)) {
+            return true;
+        }
+        if (!appRegistry.isAuthEnabled()) {
             return true;
         }
 
@@ -41,12 +45,9 @@ public class PushAuthInterceptor implements HandlerInterceptor {
         String apiKey = request.getHeader(SseConstants.HEADER_API_KEY);
         // 先用 appId 定位应用（决定白名单归属），再常量时间比对密钥——顺序不可颠倒，
         // 否则「先按密钥找、再比 appId」会让密钥探测与身份探测混在一起
-        SseProperties.AuthClient client = properties.getClients().stream()
-                .filter(c -> c.getAppId() != null && c.getAppId().equals(appId))
-                .findFirst()
-                .orElse(null);
+        PushApp client = appRegistry.find(appId).orElse(null);
 
-        if (client == null || !constantTimeEquals(client.getApiKey(), apiKey)) {
+        if (client == null || !constantTimeEquals(client.apiKey(), apiKey)) {
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.setCharacterEncoding(StandardCharsets.UTF_8.name());
@@ -54,7 +55,7 @@ public class PushAuthInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        request.setAttribute(SseConstants.ATTR_ALLOWED_MODULES, client.getAllowedModules());
+        request.setAttribute(SseConstants.ATTR_ALLOWED_MODULES, client.allowedModules());
         return true;
     }
 

@@ -46,19 +46,26 @@ public class SseController {
      *
      * @param clientId 客户端ID，由客户端生成（如 crypto.randomUUID()），需保证唯一
      * @param modules  订阅的业务模块，逗号分隔，如 {@code lot,order}。
-     *                 按模块推送的路由依据，取值必须与推送侧完全一致（含大小写）
+     *                 按模块推送的路由依据，取值必须与推送侧完全一致（含大小写）。
+     *                 缺省或为空白时默认订阅 {@link SseConstants#GLOBAL_MODULE}（接收全部按模块推送的消息）
      */
     @GetMapping(path = "/sse/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter subscribe(@RequestParam String clientId,
-                                @RequestParam(defaultValue = "") String modules) {
+                                @RequestParam(defaultValue = SseConstants.GLOBAL_MODULE) String modules) {
         if (properties.getMaxConnections() > 0 && registry.size() >= properties.getMaxConnections()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "connection limit reached");
         }
 
+        // global 归一化成常量字面量，保证与倒排索引（大小写敏感）对齐
         Set<String> moduleSet = Arrays.stream(modules.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
+                .map(m -> SseConstants.isGlobal(m) ? SseConstants.GLOBAL_MODULE : m)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (moduleSet.isEmpty()) {
+            moduleSet.add(SseConstants.GLOBAL_MODULE);
+        }
 
         // 0 = 永不过期，回收完全交给 HeartbeatTask
         SseEmitter emitter = new SseEmitter(0L);

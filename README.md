@@ -14,13 +14,15 @@
 
 | 功能 | 说明 |
 | --- | --- |
-| 长连接订阅 | `GET /sse/subscribe`，连接永不过期，一条连接可同时订阅多个业务模块 |
+| 长连接订阅 | `GET /sse/subscribe`，连接永不过期，一条连接可同时订阅多个业务模块；`modules` 留空默认订阅 `global` |
 | 双寻址推送 | 按 `bizModule` 广播、按 `clientId` 定向，两者可同时使用（命中并集、按连接去重） |
+| 全局模块 `global` | 订阅侧默认值；推 `global` = 广播给全部在线连接，推其它模块时订阅 `global` 的连接同样会收到（纯定向推送不扩散） |
+| 全局跨域 | `WebMvcConfigurer#addCorsMappings` 注册 `/**`，源 / 方法 / 头 / 凭证全量放行，无需配置 |
 | 心跳保活 | 服务端每 15s 下发 `PING`，客户端回 `PONG`，同时压制 LB / NAT 空闲断链 |
 | 死连接回收 | 四条判据（回调 / 心跳超时 / 软重置 / 写入失败）统一回收，避免半开连接堆积 |
 | 推送鉴权 | `X-Sse-AppId` + `X-Sse-Key` 配对校验（常量时间比对），并按应用限制可推送的模块白名单 |
-| 运维接口 | 在线连接数、模块分布、连接明细查询，支持按 clientId 强制下线 |
-| 内置测试页 | 启动后访问 `index.html` 即可完成建连、推送、定向推送、鉴权的全流程验证 |
+| 运维接口 | 在线连接查询与强制下线（`connections`）；推送应用 `appId`/`key` 的运行时增删（`apps`） |
+| 内置页面 | Thymeleaf：`/` 直达 `/admin`（默认：连接台账 + 一键下线 + 应用管理），`/console` 推送测试页（应用下拉、内容自定义、默认模块 `test`） |
 
 ## 二、设计优势
 
@@ -54,15 +56,40 @@ java -jar nexus-sse/target/nexus-sse-1.0.0-SNAPSHOT.jar
 
 Windows 下把 `mvn` 换成 `mvnw.cmd` 即可。
 
+### 跨域
+
+全局跨域已内置在 `WebMvcConfig#addCorsMappings`，作用于 `/**`，源 / 方法 / 头 / 凭证全量放行，**无需任何配置**：
+
+```java
+registry.addMapping("/**")
+        .allowedOriginPatterns("*")   // 凭证模式下 allowedOrigins 不接受 "*"，必须用 pattern 形式
+        .allowedMethods("*")
+        .allowedHeaders("*")          // 放开才能带 X-Sse-AppId / X-Sse-Key
+        .allowCredentials(true)
+        .maxAge(3600);
+```
+
+`/sse/push` 的 `OPTIONS` 预检不带鉴权头，已在 `PushAuthInterceptor` 中放行，否则浏览器侧跨域推送会被 401 挡掉。
+
+> 跨域只负责「让浏览器连得上」，不承载鉴权；真正的权限控制在推送鉴权与模块白名单。
+
 ### 冒烟验证
 
-1. 访问 `http://localhost:8088/index.html`，输入订阅模块 `lot`，点击「连接」，状态变为「已连接」。
-2. 页面填写业务模块 `lot`、动作 `bid`，点「推送」，日志出现 `lot:bid` 及随机价格，返回 `{"total":1,"success":1,"failed":0}`。
+0. 访问 `http://localhost:8088/` 会自动跳转 `http://localhost:8088/admin`（默认管理页）；点导航「推送测试」进入 `http://localhost:8088/console`。
+1. 在推送测试页保持默认订阅模块 `test`，点击「连接」，状态变为「已连接」。
+2. 推送应用下拉默认选中内置应用 `test`（自动带出 key `test_secret`），业务模块默认 `test`、动作 `bid`，推送内容可直接改 JSON，点「推送」→ 日志出现 `test:bid` 及自定义字段，返回 `{"total":1,"success":1,"failed":0}`。
 3. 把模块改成未订阅的 `order` 再推 → `total=0`（无连接命中，属预期行为）。
 4. 观察日志每 15s 收到一次 `PING`，Network 面板可见 `/sse/pong` 应答。
-5. `curl http://localhost:8088/sse/admin/connections` 查看在线连接与模块统计。
+5. 访问 `http://localhost:8088/admin`（或根路径 `/`）查看在线连接台账（clientId / 业务模块 / 建连时间 / 最近心跳 / 静默时长），支持过滤、排序、自动刷新与「下线」；切到「推送应用（appId / key）」页签可新增 / 删除应用（apiKey 留空自动生成 GUID）。
 
-> 内置测试页使用默认应用 `auction-core` / `auction-core-secret`，该应用白名单为 `*`（不限制模块）。
+等价于
+`curl http://localhost:8088/sse/admin/connections`、
+`curl -X DELETE http://localhost:8088/sse/admin/connections/{clientId}`、
+`curl http://localhost:8088/sse/admin/apps`、
+`curl -X POST http://localhost:8088/sse/admin/apps -d '{"appId":"x","apiKey":"y","allowedModules":["test"]}'`、
+`curl -X DELETE http://localhost:8088/sse/admin/apps/{appId}`。
+
+> 内置默认应用为 `test` / `test_secret`（白名单 `*`），开箱即用；应用不在配置文件里，管理页新增的应用**仅内存生效，重启回到内置默认应用**。
 
 ## 四、消息协议
 
@@ -151,8 +178,8 @@ es.onerror = () => {};
 ```bash
 curl -X POST http://localhost:8088/sse/push \
   -H 'Content-Type: application/json' \
-  -H 'X-Sse-AppId: auction-core' \
-  -H 'X-Sse-Key: auction-core-secret' \
+  -H 'X-Sse-AppId: test' \
+  -H 'X-Sse-Key: test_secret' \
   -d '{
         "bizModule": "lot",
         "action": "bid",
@@ -171,8 +198,8 @@ curl -X POST http://localhost:8088/sse/push \
 ```bash
 curl -X POST http://localhost:8088/sse/push \
   -H 'Content-Type: application/json' \
-  -H 'X-Sse-AppId: auction-core' \
-  -H 'X-Sse-Key: auction-core-secret' \
+  -H 'X-Sse-AppId: test' \
+  -H 'X-Sse-Key: test_secret' \
   -d '{"clientIds":["<页面生成的 clientId>"],"action":"bid","data":{"itemId":"L123"}}'
 ```
 
@@ -181,8 +208,8 @@ Java 侧调用示例（Spring `RestClient`）：
 ```java
 restClient.post()
         .uri("http://localhost:8088/sse/push")
-        .header("X-Sse-AppId", "auction-core")
-        .header("X-Sse-Key", "auction-core-secret")
+        .header("X-Sse-AppId", "test")
+        .header("X-Sse-Key", "test_secret")
         .body(PushRequest.builder()
                 .bizModule("lot")
                 .action("bid")
@@ -205,20 +232,8 @@ restClient.post()
 | `nexus.sse.max-lifetime` | `0` | 连接最大存活时间（软重置），0 表示不限制 |
 | `nexus.sse.max-connections` | `30000` | 最大连接数，0 表示不限制 |
 | `nexus.sse.auth-enabled` | `true` | 是否开启推送鉴权 |
-| `nexus.sse.clients[i].app-id` | — | 应用标识，对应 `X-Sse-AppId` |
-| `nexus.sse.clients[i].api-key` | — | 应用密钥，对应 `X-Sse-Key`，与 appId 配对校验 |
-| `nexus.sse.clients[i].allowed-modules` | `*` | 该应用允许推送的模块，`*` 表示不限制 |
 
-内置示例应用：
-
-```properties
-nexus.sse.clients[0].app-id=auction-core
-nexus.sse.clients[0].api-key=auction-core-secret
-nexus.sse.clients[0].allowed-modules=*
-nexus.sse.clients[1].app-id=bid-service
-nexus.sse.clients[1].api-key=bid-service-secret
-nexus.sse.clients[1].allowed-modules=lot
-```
+**推送应用不在这里配置**：内置默认应用 `test` / `test_secret`（白名单 `*`，开箱即用），其余应用在管理页「推送应用（appId / key）」页签运行时增删（apiKey 可自动生成 GUID），改动**仅内存生效，重启回到内置默认应用**。
 
 反向代理（Nginx）下必须关闭缓冲，否则消息会攒在缓冲区不下发：
 
@@ -251,7 +266,7 @@ chunked_transfer_encoding on;
 | ApiKey 明文 | 密钥可被日志落盘、请求可重放 | HMAC 签名 + nonce + 时间窗 |
 | 订阅/心跳应答无鉴权 | 任何人可订阅任意模块 | JWT 订阅票据 |
 | 同步扇出 | 慢消费者会阻塞推送线程 | 每连接有界出站队列 |
-| 运维接口无鉴权 | 暴露连接明细、可强制下线 | 加鉴权并限制内网访问 |
+| 运维接口无鉴权 | 暴露连接明细、可强制下线；`/sse/admin/apps` 还返回明文 apiKey | 加鉴权并限制内网访问 |
 
 明确非目标：消息必达、离线补推、跨实例路由、消息持久化、端到端加密。
 
@@ -276,6 +291,9 @@ stream-nexus
         ├── connection/SseClientRegistry.java    # 连接主表 + 模块索引 + 统一回收
         ├── core/SseSender.java / SsePusher.java # 单条写入 / 扇出
         ├── schedule/HeartbeatTask.java          # 心跳下发 + 连接回收
-        ├── controller/                          # 订阅 / 推送 / 运维接口
-        └── resources/static/index.html          # 内置测试页
+        ├── auth/PushAppRegistry.java / PushApp.java  # 推送应用运行时注册表（内置 test/test_secret + 增删）
+        ├── controller/                          # 订阅 / 推送 / 运维接口 + PageController（页面跳转）
+        └── resources/templates/                 # Thymeleaf 页面
+            ├── admin.html                       # 连接管理页（默认页：在线台账 / 强制下线）
+            └── console.html                     # 推送测试页（建连 / 推送 / 鉴权验证）
 ```

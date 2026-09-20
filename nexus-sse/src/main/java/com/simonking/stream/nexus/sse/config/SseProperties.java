@@ -4,8 +4,6 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * SSE 推送配置
@@ -43,33 +41,10 @@ public class SseProperties {
 
     /**
      * 是否开启推送鉴权
+     *
+     * <p>注意：推送应用（appId / apiKey）不在此配置，而是运行时维护在
+     * {@code PushAppRegistry}：内置默认应用 {@code test / test_secret}，
+     * 其余应用在 {@code /admin} 管理页「推送应用」页签增删（仅内存生效）
      */
     private boolean authEnabled = true;
-
-    /**
-     * 鉴权客户端列表
-     */
-    private List<AuthClient> clients = new ArrayList<>();
-
-    /**
-     * 推送鉴权客户端
-     */
-    @Data
-    public static class AuthClient {
-
-        /**
-         * 应用标识，对应请求头 {@code X-Sse-AppId}。用于定位调用方，白名单归属应用
-         */
-        private String appId;
-
-        /**
-         * 应用密钥，对应请求头 {@code X-Sse-Key}。与 appId 配对校验，必须同时匹配
-         */
-        private String apiKey;
-
-        /**
-         * 允许推送的业务模块，如 {@code lot} / {@code order}；{@code *} 表示不限制
-         */
-        private List<String> allowedModules = List.of("*");
-    }
 }

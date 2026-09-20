@@ -24,6 +24,28 @@ public final class SseConstants {
     public static final String SYS_MODULE = "sse";
 
     /**
+     * 全局模块名：订阅 {@code modules} 为空时的默认值，同时是一条「全量通道」。
+     *
+     * <p>双向生效：
+     * <ul>
+     *     <li>订阅侧：{@code modules} 缺省或为空白时，默认订阅该模块；</li>
+     *     <li>推送侧：以它为 {@code bizModule} 时广播给全部在线连接；
+     *               以其它模块推送时，订阅它的连接同样会收到（每次按模块推送都带上 global）。</li>
+     * </ul>
+     *
+     * <p>例外：纯定向推送（只填 {@code clientIds}、无 {@code bizModule}）不扩散给 global 订阅者——
+     * 一对一消息不应泄露给无关连接。
+     */
+    public static final String GLOBAL_MODULE = "global";
+
+    /**
+     * 判断模块名是否为全局模块（忽略大小写，便于订阅侧归一化后与倒排索引对齐）
+     */
+    public static boolean isGlobal(String module) {
+        return module != null && GLOBAL_MODULE.equalsIgnoreCase(module.trim());
+    }
+
+    /**
      * 系统动作：建连成功通知（{@link com.simonking.stream.nexus.common.enums.EventEnum#MESSAGE}）
      *
      * <p>客户端收到后必须重新拉取全量业务状态——服务端无快照、无补发。

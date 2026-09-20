@@ -1,5 +1,6 @@
 package com.simonking.stream.nexus.sse.core;
 
+import com.simonking.stream.nexus.common.constant.SseConstants;
 import com.simonking.stream.nexus.common.enums.EventEnum;
 import com.simonking.stream.nexus.common.model.PushRequest;
 import com.simonking.stream.nexus.common.model.PushResult;
@@ -11,18 +12,19 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.LongAdder;
-import java.util.stream.Collectors;
 
 /**
  * 推送门面
  *
  * <p>两种寻址方式：按业务模块广播、按客户端定向。同时指定时取并集并按 clientId 去重。
+ * 全局模块 {@link SseConstants#GLOBAL_MODULE} 参与两侧路由，见 {@link #resolveTargets(PushRequest)}。
  *
  * @author simonking
  */
@@ -86,33 +88,43 @@ public class SsePusher {
     }
 
     /**
-     * 解析目标连接：模块命中 ∪ 定向命中，按 clientId 去重
+     * 解析目标连接：模块命中 ∪ global 订阅者 ∪ 定向命中，按 clientId 去重
+     *
+     * <p>global 的两条规则：
+     * <ul>
+     *     <li>推送目标就是 global → 广播给全部在线连接（{@link SseClientRegistry#all()}）；</li>
+     *     <li>推送目标是其它模块 → 额外带上订阅了 global 的连接，
+     *         保证 {@code modules} 留空的客户端不会「静默收不到」。</li>
+     * </ul>
+     *
+     * <p>纯定向推送（只填 clientIds）不叠加 global，避免一对一消息扩散给无关连接。
      */
     private Collection<SseClient> resolveTargets(PushRequest request) {
-        boolean byModule = request.getBizModule() != null && !request.getBizModule().isBlank();
-        boolean byClient = request.getClientIds() != null && !request.getClientIds().isEmpty();
+        boolean byModule = StringUtils.hasText(request.getBizModule());
+        boolean byClient = !CollectionUtils.isEmpty(request.getClientIds());
 
         if (!byModule && !byClient) {
             return List.of();
         }
-        if (byModule && !byClient) {
-            return registry.byModule(request.getBizModule());
-        }
-        if (!byModule) {
-            List<SseClient> clients = registry.byClientIds(request.getClientIds());
-            if (CollectionUtils.isEmpty(clients)) {
-                return List.of();
-            }
-
-            return clients.stream().distinct().collect(Collectors.toList());
-        }
 
         Map<String, SseClient> result = new LinkedHashMap<>();
-        for (SseClient client : registry.byModule(request.getBizModule())) {
-            result.putIfAbsent(client.getClientId(), client);
+
+        if (byModule) {
+            Collection<SseClient> moduleClients = SseConstants.isGlobal(request.getBizModule())
+                    ? registry.all()
+                    : registry.byModule(request.getBizModule());
+            for (SseClient client : moduleClients) {
+                result.putIfAbsent(client.getClientId(), client);
+            }
+            for (SseClient client : registry.byModule(SseConstants.GLOBAL_MODULE)) {
+                result.putIfAbsent(client.getClientId(), client);
+            }
         }
-        for (SseClient client : registry.byClientIds(request.getClientIds())) {
-            result.putIfAbsent(client.getClientId(), client);
+
+        if (byClient) {
+            for (SseClient client : registry.byClientIds(request.getClientIds())) {
+                result.putIfAbsent(client.getClientId(), client);
+            }
         }
         return result.values();
     }
