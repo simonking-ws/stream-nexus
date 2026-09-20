@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title}">SSE 连接管理</title>
+    <style>
+        :root {
+            --brand: #2563eb;
+            --brand-soft: #eef4ff;
+            --border: #e6e8eb;
+            --text: #1f2328;
+            --muted: #8b949e;
+            --danger: #d92d20;
+            --ok: #1a7f37;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 0 0 40px;
+            font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+            color: var(--text);
+            background: #f4f6fa;
+            font-size: 14px;
+        }
+
+        .topbar {
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+            padding: 14px 28px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: .3px;
+        }
+
+        .logo {
+            width: 26px;
+            height: 26px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #2563eb, #38bdf8);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav { display: flex; gap: 6px; }
+
+        .nav a {
+            text-decoration: none;
+            color: #475467;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 13px;
+            transition: .15s;
+        }
+
+        .nav a:hover { background: var(--brand-soft); color: var(--brand); }
+
+        .nav a.active {
+            background: var(--brand);
+            color: #fff;
+            box-shadow: 0 2px 6px rgba(37, 99, 235, .28);
+        }
+
+        .meta { color: var(--muted); font-size: 12px; margin-left: auto; }
+
+        .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 28px 0; }
+
+        .tabs {
+            display: inline-flex;
+            gap: 4px;
+            background: #e9edf3;
+            padding: 4px;
+            border-radius: 999px;
+            margin-bottom: 18px;
+        }
+
+        .tabs button {
+            border: 0;
+            background: transparent;
+            padding: 7px 20px;
+            border-radius: 999px;
+            font-size: 13px;
+            color: #475467;
+            cursor: pointer;
+            transition: .15s;
+        }
+
+        .tabs button:hover { color: var(--brand); }
+
+        .tabs button.active {
+            background: #fff;
+            color: var(--brand);
+            font-weight: 600;
+            box-shadow: 0 1px 4px rgba(16, 24, 40, .12);
+        }
+
+        .card {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 18px 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+        }
+
+        .card-title { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
+        .card-sub { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 14px;
+        }
+
+        .stat {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px 14px;
+            background: linear-gradient(180deg, #fbfcfe, #fff);
+        }
+
+        .stat .label { color: var(--muted); font-size: 12px; }
+        .stat .num { font-size: 24px; font-weight: 700; margin-top: 4px; }
+        .stat .num.warn { color: var(--danger); }
+
+        .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+        .chip {
+            background: var(--brand-soft);
+            border: 1px solid #d3e1ff;
+            color: var(--brand);
+            border-radius: 999px;
+            padding: 2px 10px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .chip.global { background: #fff6e6; border-color: #ffe0ad; color: #96540a; }
+        .chip.ghost { background: #f2f4f7; border-color: #e4e7ec; color: #475467; }
+
+        .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+        input[type=text], select {
+            padding: 7px 10px;
+            border: 1px solid #d0d5dd;
+            border-radius: 8px;
+            font-size: 13px;
+            background: #fff;
+            outline: none;
+            transition: .15s;
+        }
+
+        input[type=text]:focus, select:focus {
+            border-color: var(--brand);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+        }
+
+        input[type=text]::placeholder { color: #98a2b3; }
+
+        button {
+            padding: 7px 14px;
+            border-radius: 8px;
+            border: 1px solid #d0d5dd;
+            background: #fff;
+            color: #344054;
+            font-size: 13px;
+            cursor: pointer;
+            transition: .15s;
+        }
+
+        button:hover { background: #f4f6fa; }
+        button:disabled { opacity: .55; cursor: not-allowed; }
+
+        button.primary {
+            background: var(--brand);
+            border-color: var(--brand);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        button.primary:hover { background: #1d4ed8; }
+
+        button.danger { color: var(--danger); border-color: #f5c6c2; }
+        button.danger:hover { background: #fef3f2; }
+
+        button.link {
+            border: 0;
+            background: transparent;
+            color: var(--brand);
+            padding: 2px 4px;
+            font-size: 12px;
+        }
+
+        button.link:hover { background: transparent; text-decoration: underline; }
+
+        .table-wrap { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+        th, td { padding: 11px 14px; border-bottom: 1px solid #f0f2f5; text-align: left; vertical-align: middle; }
+        th { background: #fafbfc; font-weight: 600; color: #475467; white-space: nowrap; font-size: 12px; }
+        tbody tr:last-child td { border-bottom: 0; }
+        tbody tr:hover { background: #fbfcfe; }
+
+        .cid { font-family: Consolas, "SFMono-Regular", monospace; font-size: 12px; word-break: break-all; }
+        .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+        .badge { border-radius: 999px; padding: 2px 10px; font-size: 12px; white-space: nowrap; }
+        .badge.ok { background: #e7f6ec; color: var(--ok); }
+        .badge.stale { background: #fee4e2; color: var(--danger); }
+        .badge.default { background: var(--brand-soft); color: var(--brand); }
+
+        .empty { padding: 34px; text-align: center; color: var(--muted); }
+
+        .err { color: var(--danger); font-size: 13px; }
+        .ok-text { color: var(--ok); font-size: 13px; }
+
+        .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+
+        .field { display: flex; flex-direction: column; gap: 6px; }
+        .field label { font-size: 12px; color: #475467; font-weight: 600; }
+        .field .hint { font-size: 11px; color: var(--muted); font-weight: 400; }
+        .field-row { display: flex; gap: 8px; align-items: center; }
+        .field-row input { flex: 1; min-width: 0; }
+
+        .key-cell { display: flex; align-items: center; gap: 8px; }
+        .key-cell .cid { flex: 1; min-width: 0; }
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <div class="brand"><span class="logo">SSE</span> Stream Nexus</div>
+    <div class="nav">
+        <a th:href="@{/admin}" th:classappend="${active == 'admin'} ? 'active' : ''">连接管理</a>
+        <a th:href="@{/console}" th:classappend="${active == 'console'} ? 'active' : ''">推送测试</a>
+    </div>
+    <div class="meta"
+         th:text="'心跳 ' + ${heartbeatInterval} + 's · 失联判定 ' + ${heartbeatTimeout} + 's · 连接上限 ' + ${maxConnections}"></div>
+</div>
+
+<div class="wrap">
+    <div class="tabs">
+        <button id="tabBtnConn" class="active" onclick="switchTab('conn')">连接台账</button>
+        <button id="tabBtnApp" onclick="switchTab('app')">推送应用（appId / key）</button>
+    </div>
+
+    <!-- ========== 连接台账 ========== -->
+    <div id="tabConn">
+        <div class="card">
+            <div class="stats">
+                <div class="stat">
+                    <div class="label">在线连接</div>
+                    <div class="num" id="total">-</div>
+                </div>
+                <div class="stat">
+                    <div class="label">疑似失联</div>
+                    <div class="num" id="staleCount">-</div>
+                </div>
+                <div class="stat">
+                    <div class="label">心跳超时</div>
+                    <div class="num" id="hbTimeout">-</div>
+                </div>
+                <div class="stat">
+                    <div class="label">上次刷新</div>
+                    <div class="num" id="refreshAt" style="font-size:18px">-</div>
+                </div>
+            </div>
+            <div class="chips" id="moduleChips"></div>
+        </div>
+
+        <div class="card toolbar">
+            <button onclick="load()">刷新</button>
+            <label style="font-size:12px;color:#475467">自动刷新
+                <select id="interval" onchange="applyInterval()">
+                    <option value="0">关闭</option>
+                    <option value="3000">3 秒</option>
+                    <option value="5000" selected>5 秒</option>
+                    <option value="10000">10 秒</option>
+                </select>
+            </label>
+            <label style="font-size:12px;color:#475467">排序
+                <select id="sort" onchange="render()">
+                    <option value="createTime">建连时间（新→旧）</option>
+                    <option value="silence">静默时长（长→短）</option>
+                    <option value="clientId">clientId</option>
+                </select>
+            </label>
+            <input type="text" id="keyword" placeholder="过滤 clientId / 业务模块" oninput="render()" style="width:240px">
+            <label style="font-size:12px;color:#475467;display:flex;align-items:center;gap:6px">
+                <input type="checkbox" id="staleOnly" onchange="render()"> 只看疑似失联
+            </label>
+            <span class="muted" id="tip" style="color:var(--muted);font-size:12px"></span>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th style="width:26%">clientId</th>
+                    <th style="width:18%">业务模块</th>
+                    <th style="width:14%">建连时间</th>
+                    <th style="width:14%">最近心跳</th>
+                    <th style="width:16%">静默 / 状态</th>
+                    <th style="width:12%">操作</th>
+                </tr>
+                </thead>
+                <tbody id="tbody"></tbody>
+            </table>
+            <div class="empty" id="empty" hidden>暂无连接</div>
+        </div>
+    </div>
+
+    <!-- ========== 推送应用（新增 + 删除同一页签） ========== -->
+    <div id="tabApp" hidden>
+        <div class="card">
+            <h3 class="card-title">新增应用</h3>
+            <p class="card-sub">appId 唯一；apiKey 留空自动生成 GUID；模块白名单留空 = 不限制（*）</p>
+            <div class="grid-3">
+                <div class="field">
+                    <label>appId <span class="hint">对应 X-Sse-AppId</span></label>
+                    <input type="text" id="newAppId" placeholder="如 order-service">
+                </div>
+                <div class="field">
+                    <label>apiKey <span class="hint">对应 X-Sse-Key</span></label>
+                    <div class="field-row">
+                        <input type="text" id="newApiKey" placeholder="留空自动生成 GUID">
+                        <button onclick="genKey()" title="服务端生成随机 GUID">生成</button>
+                    </div>
+                </div>
+                <div class="field">
+                    <label>模块白名单 <span class="hint">逗号分隔，留空=*</span></label>
+                    <input type="text" id="newModules" placeholder="如 lot,order">
+                </div>
+            </div>
+            <div class="toolbar" style="margin-top:16px">
+                <button class="primary" onclick="addApp()">新增应用</button>
+                <span id="appTip" style="color:var(--muted);font-size:12px"></span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 class="card-title">应用列表</h3>
+            <p class="card-sub">/sse/admin/apps · 新增 / 删除仅改内存，重启回到内置默认应用；删除后该 appId 的推送立即 401</p>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th style="width:20%">appId</th>
+                        <th style="width:34%">apiKey</th>
+                        <th style="width:31%">模块白名单</th>
+                        <th style="width:15%">操作</th>
+                    </tr>
+                    </thead>
+                    <tbody id="appTbody"></tbody>
+                </table>
+                <div class="empty" id="appEmpty" hidden>暂无应用</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let items = [];
+let meta = {};
+let timer = null;
+let apps = [];
+let defaultAppId = '';
+
+function switchTab(name) {
+    const isConn = name === 'conn';
+    document.getElementById('tabConn').hidden = !isConn;
+    document.getElementById('tabApp').hidden = isConn;
+    document.getElementById('tabBtnConn').className = isConn ? 'active' : '';
+    document.getElementById('tabBtnApp').className = isConn ? '' : 'active';
+    if (isConn) load();
+    else loadApps();
+}
+
+async function load() {
+    try {
+        const resp = await fetch('/sse/admin/connections');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        meta = await resp.json();
+        items = meta.items || [];
+        document.getElementById('refreshAt').textContent = new Date().toLocaleTimeString();
+        setTip('tip', '');
+        render();
+    } catch (e) {
+        setTip('tip', '拉取失败：' + e.message, true);
+    }
+}
+
+function applyInterval() {
+    clearInterval(timer);
+    const ms = Number(document.getElementById('interval').value);
+    if (ms > 0) timer = setInterval(load, ms);
+}
+
+function fmt(ts) {
+    return ts ? new Date(ts).toLocaleString() : '-';
+}
+
+function duration(ms) {
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return s + ' 秒';
+    if (s < 3600) return Math.floor(s / 60) + ' 分 ' + (s % 60) + ' 秒';
+    return Math.floor(s / 3600) + ' 时 ' + Math.floor(s % 3600 / 60) + ' 分';
+}
+
+function matches(it) {
+    const kw = document.getElementById('keyword').value.trim().toLowerCase();
+    if (!kw) return true;
+    return it.clientId.toLowerCase().includes(kw) || (it.modules || []).join(',').toLowerCase().includes(kw);
+}
+
+function sorted(list) {
+    const by = document.getElementById('sort').value;
+    const copy = list.slice();
+    if (by === 'clientId') return copy.sort((a, b) => a.clientId.localeCompare(b.clientId));
+    if (by === 'silence') return copy.sort((a, b) => b.silence - a.silence);
+    return copy.sort((a, b) => b.createTime - a.createTime);
+}
+
+function chip(text, extra) {
+    const span = document.createElement('span');
+    span.className = 'chip' + (extra ? ' ' + extra : '');
+    span.textContent = text;
+    return span;
+}
+
+function render() {
+    const list = sorted(items.filter(matches).filter(it => !document.getElementById('staleOnly').checked || it.stale));
+    const stale = items.filter(it => it.stale).length;
+
+    document.getElementById('total').textContent = meta.total ?? 0;
+    document.getElementById('staleCount').textContent = stale;
+    document.getElementById('staleCount').className = 'num' + (stale > 0 ? ' warn' : '');
+    document.getElementById('hbTimeout').textContent = meta.heartbeatTimeout ? duration(meta.heartbeatTimeout) : '-';
+
+    const chips = document.getElementById('moduleChips');
+    chips.innerHTML = '';
+    const modules = Object.entries(meta.modules || {});
+    if (modules.length === 0) {
+        chips.appendChild(chip('暂无模块', 'ghost'));
+    }
+    modules.forEach(([name, count]) => {
+        chips.appendChild(chip(name + ' · ' + count, name === 'global' ? 'global' : ''));
+    });
+
+    const tbody = document.getElementById('tbody');
+    tbody.innerHTML = '';
+    list.forEach(it => {
+        const tr = document.createElement('tr');
+
+        const cid = document.createElement('td');
+        cid.className = 'cid';
+        cid.textContent = it.clientId;
+        tr.appendChild(cid);
+
+        const mod = document.createElement('td');
+        (it.modules || []).forEach(m => {
+            const span = chip(m, m === 'global' ? 'global' : '');
+            span.style.marginRight = '4px';
+            mod.appendChild(span);
+        });
+        tr.appendChild(mod);
+
+        const ct = document.createElement('td');
+        ct.textContent = fmt(it.createTime);
+        const online = document.createElement('div');
+        online.className = 'sub';
+        online.textContent = '在线 ' + duration(it.online ?? 0);
+        ct.appendChild(online);
+        tr.appendChild(ct);
+
+        const lp = document.createElement('td');
+        lp.textContent = fmt(it.lastPongTime);
+        tr.appendChild(lp);
+
+        const st = document.createElement('td');
+        const badge = document.createElement('span');
+        badge.className = 'badge ' + (it.stale ? 'stale' : 'ok');
+        badge.textContent = it.stale ? '疑似失联' : '活跃';
+        st.appendChild(badge);
+        const sil = document.createElement('div');
+        sil.className = 'sub';
+        sil.textContent = '静默 ' + duration(it.silence ?? 0);
+        st.appendChild(sil);
+        tr.appendChild(st);
+
+        const op = document.createElement('td');
+        const btn = document.createElement('button');
+        btn.className = 'danger';
+        btn.textContent = '下线';
+        btn.onclick = () => kick(it.clientId, btn);
+        op.appendChild(btn);
+        tr.appendChild(op);
+
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById('empty').hidden = list.length > 0;
+}
+
+function setTip(id, text, isErr) {
+    const el = document.getElementById(id);
+    el.className = isErr ? 'err' : (text ? 'ok-text' : '');
+    el.textContent = text;
+}
+
+async function loadApps() {
+    try {
+        const resp = await fetch('/sse/admin/apps');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        apps = data.items || [];
+        defaultAppId = data.defaultAppId || '';
+        setTip('appTip', '');
+        renderApps();
+    } catch (e) {
+        setTip('appTip', '应用列表拉取失败：' + e.message, true);
+    }
+}
+
+function renderApps() {
+    const tbody = document.getElementById('appTbody');
+    tbody.innerHTML = '';
+    apps.forEach(app => {
+        const tr = document.createElement('tr');
+
+        const id = document.createElement('td');
+        const idText = document.createElement('div');
+        idText.className = 'cid';
+        idText.textContent = app.appId;
+        id.appendChild(idText);
+        if (app.appId === defaultAppId) {
+            const badge = document.createElement('span');
+            badge.className = 'badge default';
+            badge.textContent = '内置默认';
+            badge.style.marginTop = '4px';
+            badge.style.display = 'inline-block';
+            id.appendChild(badge);
+        }
+        tr.appendChild(id);
+
+        const key = document.createElement('td');
+        const keyCell = document.createElement('div');
+        keyCell.className = 'key-cell';
+        const keyText = document.createElement('span');
+        keyText.className = 'cid';
+        keyText.textContent = app.apiKey;
+        keyCell.appendChild(keyText);
+        const copy = document.createElement('button');
+        copy.className = 'link';
+        copy.textContent = '复制';
+        copy.onclick = () => copyKey(app.apiKey, copy);
+        keyCell.appendChild(copy);
+        key.appendChild(keyCell);
+        tr.appendChild(key);
+
+        const mods = document.createElement('td');
+        (app.allowedModules || []).forEach(m => {
+            const span = chip(m, m === '*' ? 'global' : '');
+            span.style.marginRight = '4px';
+            mods.appendChild(span);
+        });
+        tr.appendChild(mods);
+
+        const op = document.createElement('td');
+        const btn = document.createElement('button');
+        btn.className = 'danger';
+        btn.textContent = '删除';
+        btn.onclick = () => removeApp(app.appId, btn);
+        op.appendChild(btn);
+        tr.appendChild(op);
+
+        tbody.appendChild(tr);
+    });
+    document.getElementById('appEmpty').hidden = apps.length > 0;
+}
+
+function copyKey(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = '已复制';
+        setTimeout(() => btn.textContent = '复制', 1500);
+    }).catch(() => setTip('appTip', '复制失败，请手动选中复制', true));
+}
+
+async function genKey() {
+    try {
+        const resp = await fetch('/sse/admin/apps/generate-key');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        document.getElementById('newApiKey').value = data.apiKey;
+    } catch (e) {
+        setTip('appTip', '生成失败：' + e.message, true);
+    }
+}
+
+async function addApp() {
+    const appId = document.getElementById('newAppId').value.trim();
+    if (!appId) {
+        setTip('appTip', 'appId 不能为空', true);
+        return;
+    }
+    const apiKey = document.getElementById('newApiKey').value.trim();
+    const modules = document.getElementById('newModules').value.trim();
+    const body = {
+        appId,
+        apiKey,
+        allowedModules: modules ? modules.split(',').map(s => s.trim()).filter(Boolean) : []
+    };
+    try {
+        const resp = await fetch('/sse/admin/apps', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        if (!resp.ok) {
+            throw new Error((await resp.text()) || ('HTTP ' + resp.status));
+        }
+        const data = await resp.json();
+        document.getElementById('newAppId').value = '';
+        document.getElementById('newApiKey').value = '';
+        document.getElementById('newModules').value = '';
+        setTip('appTip', '已新增：' + appId + '（key ' + (data.apiKey || '') + '）');
+    } catch (e) {
+        setTip('appTip', '新增失败：' + e.message, true);
+        return;
+    }
+    await loadApps();
+}
+
+async function removeApp(appId, btn) {
+    if (!confirm('确认删除应用？\n\n' + appId + '\n\n删除后用它推送会立即返回 401。')) return;
+    btn.disabled = true;
+    try {
+        const resp = await fetch('/sse/admin/apps/' + encodeURIComponent(appId), {method: 'DELETE'});
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        setTip('appTip', '已删除：' + appId);
+    } catch (e) {
+        btn.disabled = false;
+        setTip('appTip', '删除失败：' + e.message, true);
+        return;
+    }
+    await loadApps();
+}
+
+async function kick(clientId, btn) {
+    if (!confirm('确认下线该连接？\n\n' + clientId + '\n\n下线后客户端会自动重连。')) return;
+    btn.disabled = true;
+    btn.textContent = '下线中';
+    try {
+        const resp = await fetch('/sse/admin/connections/' + encodeURIComponent(clientId), {method: 'DELETE'});
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = '下线';
+        setTip('tip', '下线失败：' + e.message, true);
+        return;
+    }
+    await load();
+}
+
+load();
+loadApps();
+applyInterval();
+</script>
+</body>
+</html>

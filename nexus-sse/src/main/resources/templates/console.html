@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title}">SSE 推送测试</title>
+    <style>
+        :root {
+            --brand: #2563eb;
+            --brand-soft: #eef4ff;
+            --border: #e6e8eb;
+            --text: #1f2328;
+            --muted: #8b949e;
+            --danger: #d92d20;
+            --ok: #1a7f37;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 0 0 40px;
+            font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+            color: var(--text);
+            background: #f4f6fa;
+            font-size: 14px;
+        }
+
+        .topbar {
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+            padding: 14px 28px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .brand { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700; }
+
+        .logo {
+            width: 26px;
+            height: 26px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #2563eb, #38bdf8);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav { display: flex; gap: 6px; }
+
+        .nav a {
+            text-decoration: none;
+            color: #475467;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 13px;
+            transition: .15s;
+        }
+
+        .nav a:hover { background: var(--brand-soft); color: var(--brand); }
+
+        .nav a.active {
+            background: var(--brand);
+            color: #fff;
+            box-shadow: 0 2px 6px rgba(37, 99, 235, .28);
+        }
+
+        .meta { color: var(--muted); font-size: 12px; margin-left: auto; }
+
+        .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 28px 0; }
+
+        .card {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 18px 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+        }
+
+        .card-title { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
+        .card-sub { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+
+        .field { display: flex; flex-direction: column; gap: 6px; }
+        .field label { font-size: 12px; color: #475467; font-weight: 600; }
+        .field .hint { font-size: 11px; color: var(--muted); font-weight: 400; }
+
+        input[type=text], select, textarea {
+            padding: 7px 10px;
+            border: 1px solid #d0d5dd;
+            border-radius: 8px;
+            font-size: 13px;
+            background: #fff;
+            outline: none;
+            transition: .15s;
+            width: 100%;
+        }
+
+        input[type=text]:focus, select:focus, textarea:focus {
+            border-color: var(--brand);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+        }
+
+        textarea { font-family: Consolas, "SFMono-Regular", monospace; font-size: 12px; resize: vertical; height: 180px; }
+
+        button {
+            width: 100px;
+            padding: 7px 14px;
+            border-radius: 8px;
+            border: 1px solid #d0d5dd;
+            background: #fff;
+            color: #344054;
+            font-size: 13px;
+            cursor: pointer;
+            transition: .15s;
+        }
+
+        button:hover { background: #f4f6fa; }
+
+        button.primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+        button.primary:hover { background: #1d4ed8; }
+
+        .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+        #status { font-weight: 600; }
+        .on { color: var(--ok); }
+        .off { color: var(--danger); }
+
+        .dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--danger);
+            margin-right: 6px;
+        }
+
+        .dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(26, 127, 55, .15); }
+
+        .cid { font-family: Consolas, monospace; font-size: 12px; word-break: break-all; }
+
+        #log {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #fff;
+            padding: 10px 12px;
+            height: 340px;
+            overflow: auto;
+            font-family: Consolas, "SFMono-Regular", monospace;
+            font-size: 12px;
+        }
+
+        .line { border-bottom: 1px dashed #eef0f3; padding: 4px 0; }
+        .muted { color: var(--muted); }
+        .err { color: var(--danger); font-size: 13px; }
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <div class="brand"><span class="logo">SSE</span> Stream Nexus</div>
+    <div class="nav">
+        <a th:href="@{/admin}" th:classappend="${active == 'admin'} ? 'active' : ''">连接管理</a>
+        <a th:href="@{/console}" th:classappend="${active == 'console'} ? 'active' : ''">推送测试</a>
+    </div>
+    <div class="meta" th:text="'心跳 ' + ${heartbeatInterval} + 's · 失联判定 ' + ${heartbeatTimeout} + 's'"></div>
+</div>
+
+<div class="wrap">
+    <div class="card">
+        <h3 class="card-title">订阅</h3>
+        <p class="card-sub">一条连接可订阅多个模块，模块名须与推送侧 bizModule 完全一致（含大小写）</p>
+        <div class="grid">
+            <div class="field" style="grid-column:1/-1">
+                <label>连接地址 <span class="hint">可编辑，点「连接」时以输入框内容为准（缺 clientId / modules 会自动补齐）</span></label>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <input type="text" id="subUrl" spellcheck="false">
+                    <button onclick="resetUrl()" title="重新生成 clientId 并回填地址">重生成</button>
+                </div>
+            </div>
+            <div class="field">
+                <label>订阅业务模块 <span class="hint">逗号分隔，留空默认 global；改动会同步进地址</span></label>
+                <input type="text" id="modules" value="test" oninput="syncModules()">
+            </div>
+        </div>
+        <div class="row" style="margin-top:16px">
+            <button class="primary" onclick="connect()">连接</button>
+            <button onclick="disconnect()">断开</button>
+            <span><span class="dot" id="dot"></span>状态：<span id="status" class="off">未连接</span></span>
+            <span class="muted">clientId：<span class="cid" id="clientId">-</span></span>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="card-title">推送</h3>
+        <p class="card-sub">POST /sse/push · 需 X-Sse-AppId + X-Sse-Key 配对，且 bizModule 在该应用白名单内</p>
+        <div class="grid">
+            <div class="field">
+                <label>推送应用 <span class="hint">来自 /sse/admin/apps</span></label>
+                <select id="appSelect" onchange="onAppChange()"></select>
+            </div>
+            <div class="field">
+                <label>key <span class="hint">选中应用自动带入，可手动覆盖</span></label>
+                <input type="text" id="appKey">
+            </div>
+            <div class="field">
+                <label>业务模块</label>
+                <input type="text" id="bizModule" value="test">
+            </div>
+            <div class="field">
+                <label>动作</label>
+                <input type="text" id="action" value="test_msg">
+            </div>
+            <div class="field">
+                <label>定向 clientId <span class="hint">留空=按模块广播</span></label>
+                <input type="text" id="targetClientId" placeholder="留空=按模块广播">
+            </div>
+        </div>
+        <div class="field" style="margin-top:14px">
+            <label>推送内容 <span class="hint">自定义业务 JSON，ts 由页面自动填充</span></label>
+            <textarea id="payload" rows="4">{
+  "message": "hello sse"
+}</textarea>
+        </div>
+        <div class="row" style="margin-top:14px">
+            <button class="primary" onclick="push()">推送</button>
+            <span class="muted" id="pushTip"></span>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="card-title">收发日志</h3>
+        <p class="card-sub">心跳 PING 默认每 15s 一次，收到即回 PONG；不回会被判定失联并回收</p>
+        <div id="log"></div>
+    </div>
+</div>
+
+<script>
+let es = null;
+let clientId = null;
+let lastTs = {};      // 按 bizModule:action 记录已处理的最大 ts，用于丢弃乱序消息
+let appList = [];     // 推送应用（appId / apiKey），来自 /sse/admin/apps
+
+// 协议常量：与服务端 SseConstants / EventEnum 一一对应，协议值改动需两端同步
+const SYS_MODULE = 'sse';   // 系统消息模块，业务路由不匹配即忽略
+const EVT_MESSAGE = 'MESSAGE';
+const EVT_PING = 'PING';
+const EVT_PONG = 'PONG';
+
+const bizRoutes = {
+    'test:test_msg': m => `消息：${JSON.stringify(m.data)}`,
+    'test:bid': m => `出价：${JSON.stringify(m.data)}`,
+    'lot:bid': m => `出价：${JSON.stringify(m.data)}`,
+    'order:create': m => `订单：${JSON.stringify(m.data)}`
+};
+
+function log(text, muted) {
+    const div = document.createElement('div');
+    div.className = 'line' + (muted ? ' muted' : '');
+    div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+    document.getElementById('log').prepend(div);
+}
+
+/**
+ * 连接地址：默认拼自当前站点，可手改（如换端口 / 走网关域名）。
+ * 手改后非法时回退到默认地址，避免静默连不上
+ */
+function currentUrl() {
+    try {
+        return new URL(document.getElementById('subUrl').value.trim());
+    } catch (e) {
+        return new URL(location.origin + '/sse/subscribe');
+    }
+}
+
+/**
+ * 生成新 clientId 并回填地址：页面加载、断开、点「重生成」都会走这里
+ */
+function resetUrl() {
+    clientId = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
+    document.getElementById('clientId').textContent = clientId;
+    const u = currentUrl();
+    u.searchParams.set('clientId', clientId);
+    if (!u.searchParams.get('modules')) {
+        u.searchParams.set('modules', document.getElementById('modules').value);
+    }
+    document.getElementById('subUrl').value = u.toString();
+}
+
+/** 订阅模块改动同步进地址（只改 modules 参数，保留手改的其余部分） */
+function syncModules() {
+    const u = currentUrl();
+    u.searchParams.set('modules', document.getElementById('modules').value);
+    document.getElementById('subUrl').value = u.toString();
+}
+
+function connect() {
+    if (es) return;
+    // 地址里没有 clientId（被手改删掉）时补一个，否则沿用地址里的那个
+    if (!currentUrl().searchParams.get('clientId')) {
+        resetUrl();
+    } else {
+        clientId = currentUrl().searchParams.get('clientId');
+        document.getElementById('clientId').textContent = clientId;
+    }
+    setStatus('已连接', true);
+
+    es = new EventSource(currentUrl().toString());
+
+    es.onopen = () => {
+        setStatus('已连接', true);
+        log('连接建立，请在真实业务中重新拉取全量状态');
+    };
+
+    es.onerror = () => setStatus('重连中', false);
+
+    // 业务消息（建连消息 sse/connected 也走这里）
+    es.addEventListener(EVT_MESSAGE, e => {
+        const m = JSON.parse(e.data);
+        if (m.bizModule === SYS_MODULE) {
+            log('收到建连消息：' + JSON.stringify(m.data), true);
+            return;
+        }
+        const key = `${m.bizModule}:${m.action}`;
+        if (m.ts <= (lastTs[key] || 0)) return;   // 丢弃乱序 / 旧消息
+        lastTs[key] = m.ts;
+        const render = bizRoutes[key];
+        log(`${key} ${render ? render(m) : JSON.stringify(m.data)}`);
+    });
+
+    // 心跳：服务端每 15s 下发一次 PING，收到立即回 PONG；
+    // 不回会被判定失联（默认 90s）并回收连接
+    es.addEventListener(EVT_PING, () => pong());
+}
+
+function setStatus(text, online) {
+    document.getElementById('status').textContent = text;
+    document.getElementById('status').className = online ? 'on' : 'off';
+    document.getElementById('dot').className = 'dot' + (online ? ' on' : '');
+}
+
+function pong() {
+    fetch(`/sse/pong?clientId=${encodeURIComponent(clientId)}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({event: EVT_PONG, ts: Date.now()})
+    });
+}
+
+function disconnect() {
+    if (!es) return;
+    es.close();
+    es = null;
+    setStatus('已断开', false);
+    resetUrl();   // 换一个 clientId，下次连接是全新身份
+}
+
+function tip(text, isErr) {
+    const el = document.getElementById('pushTip');
+    el.className = isErr ? 'err' : 'muted';
+    el.textContent = text;
+}
+
+/**
+ * 拉取推送应用，填充 appId 下拉；优先选中内置默认应用
+ */
+async function loadApps() {
+    const sel = document.getElementById('appSelect');
+    let defaultAppId = '';
+    try {
+        const resp = await fetch('/sse/admin/apps');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        appList = data.items || [];
+        defaultAppId = data.defaultAppId || '';
+        tip('');
+    } catch (e) {
+        appList = [];
+        tip('应用列表拉取失败：' + e.message, true);
+    }
+    sel.innerHTML = '';
+    if (appList.length === 0) {
+        const opt = document.createElement('option');
+        opt.textContent = '（无应用，请到管理页新增）';
+        sel.appendChild(opt);
+    } else {
+        appList.forEach(app => {
+            const opt = document.createElement('option');
+            opt.value = app.appId;
+            opt.textContent = app.appId + '（' + (app.allowedModules || []).join(',') + '）';
+            sel.appendChild(opt);
+        });
+        sel.value = appList.some(a => a.appId === defaultAppId) ? defaultAppId : appList[0].appId;
+    }
+    onAppChange();
+}
+
+function onAppChange() {
+    const app = appList.find(a => a.appId === document.getElementById('appSelect').value);
+    // 下拉选中即带入 key；保留输入框可手动覆盖，用于临时验证「错误 key 应被拒」
+    document.getElementById('appKey').value = app ? app.apiKey : '';
+}
+
+function push() {
+    const appId = document.getElementById('appSelect').value;
+    const apiKey = document.getElementById('appKey').value.trim();
+    if (!appId || !apiKey) {
+        tip('请选择推送应用或手填 key', true);
+        return;
+    }
+
+    let data;
+    try {
+        data = JSON.parse(document.getElementById('payload').value || '{}');
+    } catch (e) {
+        tip('推送内容不是合法 JSON：' + e.message, true);
+        return;
+    }
+    // ts 由页面统一填充：它是客户端丢弃乱序 / 旧消息的依据
+    data.ts = Date.now();
+
+    const body = {
+        bizModule: document.getElementById('bizModule').value.trim(),
+        action: document.getElementById('action').value.trim(),
+        data: data
+    };
+    const targetClientId = document.getElementById('targetClientId').value.trim();
+    if (targetClientId) {
+        body.clientIds = [targetClientId];   // 定向推送（与按模块广播取并集）
+    }
+    tip('');
+    fetch('/sse/push', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Sse-AppId': appId,
+            'X-Sse-Key': apiKey
+        },
+        body: JSON.stringify(body)
+    }).then(r => r.json()).then(r => log('推送结果：' + JSON.stringify(r), true));
+}
+
+// 初始地址：当前站点 + /sse/subscribe，并带上一个现成的 clientId
+document.getElementById('subUrl').value =
+    location.origin + '/sse/subscribe?modules=' + encodeURIComponent(document.getElementById('modules').value);
+resetUrl();
+loadApps();
+</script>
+</body>
+</html>
