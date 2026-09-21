@@ -1,0 +1,22 @@
+# 构建上下文瘦身：Maven 构建只需要 pom.xml + src，其余一律不进（改了也不会让镜像重建）
+.git
+.gitignore
+.idea
+*.iml
+.mvn
+docs
+scripts
+target
+**/target
+**/.mvn
+**/mvnw
+**/mvnw.cmd
+**/*.log
+
+# 镜像/编排自身不进镜像，避免递归拷自己
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+README.md
+LICENSE

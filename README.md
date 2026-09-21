@@ -56,6 +56,29 @@ java -jar nexus-sse/target/nexus-sse-1.0.0-SNAPSHOT.jar
 
 Windows 下把 `mvn` 换成 `mvnw.cmd` 即可。
 
+### Docker 部署
+
+```bash
+# 方式一：编排（推荐，会先构建再启动）
+docker compose up -d --build
+
+# 方式二：先打镜像再跑
+./scripts/docker-build.sh       # Windows: scripts\docker-build.cmd
+docker run -d --name stream-nexus -p 8088:8088 simonking/stream-nexus:1.0.0-SNAPSHOT
+
+docker compose logs -f          # 看日志
+docker compose down             # 停掉
+```
+
+要点：
+
+- **多阶段构建**：`maven:3.9-eclipse-temurin-17` 负责打包，`eclipse-temurin:17-jre-jammy` 只跑 JRE，最终镜像不含 Maven 与源码
+- **构建上下文是仓库根目录**：`nexus-sse` 的父 POM 在根目录且依赖 `nexus-common`，在 `nexus-sse/` 下直接 `docker build` 会找不到父 POM
+- **非 root 运行**（uid 1000）、`exec java` 保证 1 号进程能收到 SIGTERM 优雅停机
+- **配置用环境变量覆盖**（Spring 宽松绑定）：`NEXUS_SSE_CONNECT_AUTH_ENABLED`、`NEXUS_SSE_HEARTBEAT_INTERVAL`、`SERVER_PORT` 等，见 `docker-compose.yml`
+- 改版本号时同步 `Dockerfile` 的 `ARG JAR_VERSION`（或 `--build-arg JAR_VERSION=x` 与脚本的 `JAR_VERSION`）
+- 反向代理下仍需关闭缓冲，否则 SSE 消息会攒在缓冲区不下发
+
 ### 跨域
 
 全局跨域已内置在 `WebMvcConfig#addCorsMappings`，作用于 `/**`，源 / 方法 / 头 / 凭证全量放行，**无需任何配置**：
@@ -278,6 +301,12 @@ chunked_transfer_encoding on;
 ```
 stream-nexus
 ├── pom.xml                     # 父 POM（Spring Boot 4.1.1，Java 17）
+├── Dockerfile                  # 多阶段构建：Maven 打包 + JRE 运行（非 root）
+├── docker-compose.yml          # 单机编排，配置用环境变量覆盖
+├── .dockerignore               # 构建上下文瘦身
+├── scripts/
+│   ├── docker-build.sh         # 打镜像（Linux / macOS）
+│   └── docker-build.cmd        # 打镜像（Windows）
 ├── docs/                       # 设计文档
 ├── nexus-common/               # 跨模块契约
 │   └── src/main/java/com/simonking/stream/nexus/common

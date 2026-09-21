@@ -1,0 +1,30 @@
+# 单机一键起服务：docker compose up -d --build
+#
+# 端口 8088 与 application.properties 保持一致；改端口同步改 SERVER_PORT 与端口映射。
+# 配置项一律用环境变量覆盖（Spring 宽松绑定：
+# nexus.sse.connect-auth-enabled -> NEXUS_SSE_CONNECT_AUTH_ENABLED）。
+
+services:
+  stream-nexus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: simonking/stream-nexus:1.0.0-SNAPSHOT
+    container_name: stream-nexus
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    environment:
+      TZ: Asia/Shanghai
+      JAVA_OPTS: "-XX:MaxRAMPercentage=75"
+      # 心跳与准入（与配置默认值一致，列出来方便直接改）
+      NEXUS_SSE_HEARTBEAT_INTERVAL: 15s
+      NEXUS_SSE_HEARTBEAT_TIMEOUT: 90s
+      NEXUS_SSE_MAX_CONNECTIONS: 30000
+      # 建连鉴权默认关闭；打开后客户端必须带 X-Sse-Token 头或 token 参数
+      NEXUS_SSE_CONNECT_AUTH_ENABLED: "false"
+      NEXUS_SSE_CONNECT_AUTH_TOKEN: "57yW56iL5pyd6Iqx5aSV5ou+"
+
+# 注意：
+# 1. 上面的令牌是明文示例，生产请用 docker secret / 外部 env 文件挂载，别提交真实口令。
+# 2. 反向代理（Nginx）下必须关掉 proxy_buffering，否则 SSE 消息会攒在缓冲区不下发。
