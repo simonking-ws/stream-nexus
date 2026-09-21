@@ -257,7 +257,7 @@ restClient.post()
 | `nexus.sse.max-connections` | `30000` | 最大连接数，0 表示不限制 |
 | `nexus.sse.auth-enabled` | `true` | 是否开启推送鉴权（谁能推） |
 | `nexus.sse.connect-auth-enabled` | `false` | 是否开启**建连**鉴权（谁能连 `/sse/subscribe`） |
-| `nexus.sse.connect-auth-token` | 空 | 建连令牌，所有订阅方共用；开关打开且留空时建连一律拒绝 |
+| `nexus.sse.connect-auth-token` | `57yW56iL5pyd6Iqx5aSV5ou+` | 建连令牌，所有订阅方共用；开关打开且留空时建连一律拒绝 |
 
 **推送应用不在这里配置**：内置默认应用 `test` / `test_secret`（白名单 `*`，开箱即用），其余应用在管理页「推送应用（appId / key）」页签运行时增删改（apiKey 可自动生成：GUID → Base64），改动**仅内存生效，重启回到内置默认应用**。
 
