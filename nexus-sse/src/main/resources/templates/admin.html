@@ -357,15 +357,15 @@
 
         <div class="card">
             <h3 class="card-title">应用列表</h3>
-            <p class="card-sub">/sse/admin/apps · 新增 / 删除仅改内存，重启回到内置默认应用；删除后该 appId 的推送立即 401</p>
+            <p class="card-sub">/sse/admin/apps · 新增 / 修改 / 删除仅改内存，重启回到内置默认应用；删除后该 appId 的推送立即 401</p>
             <div class="table-wrap">
                 <table>
                     <thead>
                     <tr>
-                        <th style="width:20%">appId</th>
-                        <th style="width:34%">apiKey</th>
-                        <th style="width:31%">模块白名单</th>
-                        <th style="width:15%">操作</th>
+                        <th style="width:18%">appId</th>
+                        <th style="width:30%">apiKey</th>
+                        <th style="width:29%">模块白名单</th>
+                        <th style="width:23%">操作</th>
                     </tr>
                     </thead>
                     <tbody id="appTbody"></tbody>
@@ -382,6 +382,8 @@ let meta = {};
 let timer = null;
 let apps = [];
 let defaultAppId = '';
+// 正在行内编辑的 appId，空串表示没有
+let editingAppId = '';
 
 function switchTab(name) {
     const isConn = name === 'conn';
@@ -543,6 +545,7 @@ function renderApps() {
     const tbody = document.getElementById('appTbody');
     tbody.innerHTML = '';
     apps.forEach(app => {
+        const editing = app.appId === editingAppId;
         const tr = document.createElement('tr');
 
         const id = document.createElement('td');
@@ -560,35 +563,63 @@ function renderApps() {
         }
         tr.appendChild(id);
 
+        // apiKey：编辑态换成输入框，留空 = 不修改
         const key = document.createElement('td');
-        const keyCell = document.createElement('div');
-        keyCell.className = 'key-cell';
-        const keyText = document.createElement('span');
-        keyText.className = 'cid';
-        keyText.textContent = app.apiKey;
-        keyCell.appendChild(keyText);
-        const copy = document.createElement('button');
-        copy.className = 'link';
-        copy.textContent = '复制';
-        copy.onclick = () => copyKey(app.apiKey, copy);
-        keyCell.appendChild(copy);
-        key.appendChild(keyCell);
+        if (editing) {
+            key.appendChild(editInput('editApiKey', app.apiKey, '留空 = 不修改'));
+        } else {
+            const keyCell = document.createElement('div');
+            keyCell.className = 'key-cell';
+            const keyText = document.createElement('span');
+            keyText.className = 'cid';
+            keyText.textContent = app.apiKey;
+            keyCell.appendChild(keyText);
+            const copy = document.createElement('button');
+            copy.className = 'link';
+            copy.textContent = '复制';
+            copy.onclick = () => copyKey(app.apiKey, copy);
+            keyCell.appendChild(copy);
+            key.appendChild(keyCell);
+        }
         tr.appendChild(key);
 
+        // 模块白名单：编辑态换成输入框，留空 = *
         const mods = document.createElement('td');
-        (app.allowedModules || []).forEach(m => {
-            const span = chip(m, m === '*' ? 'global' : '');
-            span.style.marginRight = '4px';
-            mods.appendChild(span);
-        });
+        if (editing) {
+            mods.appendChild(editInput('editModules', (app.allowedModules || []).join(','), '留空 = 不限制（*）'));
+        } else {
+            (app.allowedModules || []).forEach(m => {
+                const span = chip(m, m === '*' ? 'global' : '');
+                span.style.marginRight = '4px';
+                mods.appendChild(span);
+            });
+        }
         tr.appendChild(mods);
 
         const op = document.createElement('td');
-        const btn = document.createElement('button');
-        btn.className = 'danger';
-        btn.textContent = '删除';
-        btn.onclick = () => removeApp(app.appId, btn);
-        op.appendChild(btn);
+        if (editing) {
+            const save = document.createElement('button');
+            save.className = 'primary';
+            save.textContent = '保存';
+            save.onclick = () => saveEdit(app.appId, save);
+            op.appendChild(save);
+            const cancel = document.createElement('button');
+            cancel.textContent = '取消';
+            cancel.style.marginLeft = '6px';
+            cancel.onclick = cancelEdit;
+            op.appendChild(cancel);
+        } else {
+            const edit = document.createElement('button');
+            edit.textContent = '修改';
+            edit.onclick = () => startEdit(app.appId);
+            op.appendChild(edit);
+            const btn = document.createElement('button');
+            btn.className = 'danger';
+            btn.textContent = '删除';
+            btn.style.marginLeft = '6px';
+            btn.onclick = () => removeApp(app.appId, btn);
+            op.appendChild(btn);
+        }
         tr.appendChild(op);
 
         tbody.appendChild(tr);
@@ -601,6 +632,60 @@ function copyKey(text, btn) {
         btn.textContent = '已复制';
         setTimeout(() => btn.textContent = '复制', 1500);
     }).catch(() => setTip('appTip', '复制失败，请手动选中复制', true));
+}
+
+function editInput(id, value, placeholder) {
+    const box = document.createElement('div');
+    box.className = 'field-row';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = id;
+    input.value = value || '';
+    input.placeholder = placeholder || '';
+    box.appendChild(input);
+    return box;
+}
+
+function startEdit(appId) {
+    editingAppId = appId;
+    setTip('appTip', '');
+    renderApps();
+}
+
+function cancelEdit() {
+    editingAppId = '';
+    setTip('appTip', '');
+    renderApps();
+}
+
+async function saveEdit(appId, btn) {
+    const apiKey = document.getElementById('editApiKey').value.trim();
+    const modules = document.getElementById('editModules').value.trim();
+    const body = {
+        apiKey,
+        allowedModules: modules ? modules.split(',').map(s => s.trim()).filter(Boolean) : []
+    };
+    btn.disabled = true;
+    btn.textContent = '保存中';
+    try {
+        const resp = await fetch('/sse/admin/apps/' + encodeURIComponent(appId), {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        if (!resp.ok) {
+            throw new Error((await resp.text()) || ('HTTP ' + resp.status));
+        }
+        const data = await resp.json();
+        editingAppId = '';
+        await loadApps();
+        // loadApps 会清一次提示，所以成功文案放在刷新之后
+        setTip('appTip', '已修改：' + appId + '（白名单 ' + (data.allowedModules || []).join(', ') + '）');
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = '保存';
+        setTip('appTip', '修改失败：' + e.message, true);
+    }
 }
 
 async function genKey() {

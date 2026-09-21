@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -85,6 +86,35 @@ public class AdminController {
     }
 
     /**
+     * 修改应用：只改传了的字段，{@code appId} 本身不可改（改标识请删除后重建）
+     *
+     * <p>{@code apiKey} 为空 / 全空白表示不修改；{@code allowedModules} 为 null 表示不修改，
+     * 传空数组表示清空限制（归一化成 {@code *}）。改动立即生效：下一次推送就按新白名单鉴权。
+     */
+    @PutMapping("/apps/{appId}")
+    public Map<String, Object> updateApp(@PathVariable String appId, @RequestBody AppUpdateRequest body) {
+        PushApp existed = appRegistry.find(appId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "appId not found: " + appId));
+        if (body == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request body is required");
+        }
+        String apiKey = StringUtils.hasText(body.apiKey()) ? body.apiKey().trim() : existed.apiKey();
+        List<String> modules = body.allowedModules() == null
+                ? existed.allowedModules()
+                : PushAppRegistry.normalize(body.allowedModules());
+
+        PushApp updated = new PushApp(existed.appId(), apiKey, modules);
+        appRegistry.save(updated);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("ok", true);
+        result.put("appId", updated.appId());
+        result.put("apiKey", updated.apiKey());
+        result.put("allowedModules", updated.allowedModules());
+        return result;
+    }
+
+    /**
      * 删除应用：立即生效，该 appId 之后的推送一律 401
      */
     @DeleteMapping("/apps/{appId}")
@@ -127,6 +157,12 @@ public class AdminController {
      * 新增应用的请求体：{@code allowedModules} 留空 = 不限制模块
      */
     public record AppRequest(String appId, String apiKey, List<String> allowedModules) {
+    }
+
+    /**
+     * 修改应用的请求体：字段为 null / 空串表示「不改」，{@code allowedModules} 空数组表示不限模块
+     */
+    public record AppUpdateRequest(String apiKey, List<String> allowedModules) {
     }
 
     private Map<String, Object> toView(SseClient client, long now) {

@@ -87,6 +87,7 @@ registry.addMapping("/**")
 `curl -X DELETE http://localhost:8088/sse/admin/connections/{clientId}`、
 `curl http://localhost:8088/sse/admin/apps`、
 `curl -X POST http://localhost:8088/sse/admin/apps -d '{"appId":"x","apiKey":"y","allowedModules":["test"]}'`、
+`curl -X PUT http://localhost:8088/sse/admin/apps/{appId} -d '{"allowedModules":["test","order"]}'`（改模块白名单，apiKey 留空表示不改）、
 `curl -X DELETE http://localhost:8088/sse/admin/apps/{appId}`。
 
 > 内置默认应用为 `test` / `test_secret`（白名单 `*`），开箱即用；应用不在配置文件里，管理页新增的应用**仅内存生效，重启回到内置默认应用**。

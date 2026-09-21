@@ -221,8 +221,8 @@ long next = Math.max(System.currentTimeMillis(), prev + 1);  // CAS
 ### 4.4 推送与鉴权
 
 - `POST /sse/push`，`PushAuthInterceptor` 拦 `/sse/push/**`，校验 `X-Sse-AppId`（应用标识）+ `X-Sse-Key`（应用密钥），二者必须配对匹配（`MessageDigest.isEqual` 常量时间比对防时序侧信道）；`X-Sse-AppId` 决定**应用**，`X-Sse-Key` 证明**身份**；
-- 凭证不来自配置文件，而是运行时注册表 `PushAppRegistry`：内置默认应用 `test` / `test_secret`（白名单 `*`），其余应用在管理页「推送应用（appId / key）」页签增删（内存态，重启回到默认应用）；删除后该 appId 的推送立即 401；
-- 应用管理接口：`GET /sse/admin/apps`（返回明文 apiKey 与 `defaultAppId`，供测试页下拉使用）、`GET /sse/admin/apps/generate-key`（服务端生成 GUID，避免人工起弱口令）、`POST /sse/admin/apps`（apiKey 留空则自动生成；重名 → 409）、`DELETE /sse/admin/apps/{appId}`；
+- 凭证不来自配置文件，而是运行时注册表 `PushAppRegistry`：内置默认应用 `test` / `test_secret`（白名单 `*`），其余应用在管理页「推送应用（appId / key）」页签增删改（内存态，重启回到默认应用）；删除后该 appId 的推送立即 401，白名单改动下一次推送即生效；
+- 应用管理接口：`GET /sse/admin/apps`（返回明文 apiKey 与 `defaultAppId`，供测试页下拉使用）、`GET /sse/admin/apps/generate-key`（服务端生成 GUID，避免人工起弱口令）、`POST /sse/admin/apps`（apiKey 留空则自动生成；重名 → 409）、`PUT /sse/admin/apps/{appId}`（修改：只改传了的字段，apiKey 留空 / `allowedModules` 为 null 表示不改，`allowedModules` 空数组表示不限模块；appId 不存在 → 404）、`DELETE /sse/admin/apps/{appId}`；
 - `PushController.checkModulePermission` 做**业务模块白名单**：白名单归属 appId，如新建的 `order-svc` 只允许 `order`，推其它模块返回 403；
 - 目标解析见 `SsePusher.resolveTargets`：按模块命中 ∪ 定向命中，按 clientId 去重，一条连接不会被重复投递；
 - `bizModule` 与 `clientIds` 同时为空 → 400；
