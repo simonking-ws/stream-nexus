@@ -40,6 +40,11 @@ public class SseClient {
     private final Set<String> modules;
 
     /**
+     * 客户端 IP（建连时从请求解析，支持 X-Forwarded-For / X-Real-IP 代理头）
+     */
+    private final String ip;
+
+    /**
      * 建连时间
      */
     private long createTime;
@@ -49,10 +54,11 @@ public class SseClient {
      */
     private volatile long lastPongTime;
 
-    public SseClient(String clientId, SseEmitter emitter, Set<String> modules) {
+    public SseClient(String clientId, SseEmitter emitter, Set<String> modules, String ip) {
         this.clientId = clientId;
         this.emitter = emitter;
         this.modules = new CopyOnWriteArraySet<>(modules);
+        this.ip = ip;
         this.createTime = System.currentTimeMillis();
         this.lastPongTime = this.createTime;
     }

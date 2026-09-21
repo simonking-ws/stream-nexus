@@ -169,6 +169,7 @@ public class AdminController {
         long silence = Math.max(now - client.getLastPongTime(), 0);
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("clientId", client.getClientId());
+        view.put("ip", client.getIp() == null ? "-" : client.getIp());
         view.put("modules", client.getModules());
         view.put("createTime", client.getCreateTime());
         view.put("lastPongTime", client.getLastPongTime());

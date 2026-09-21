@@ -8,11 +8,11 @@
         <version>1.0.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
-    <groupId>com.simonking.stream</groupId>
-    <artifactId>nexus-sse</artifactId>
+    <groupId>com.simonking.nexus</groupId>
+    <artifactId>nexus-websocket</artifactId>
     <version>1.0.0</version>
-    <name>nexus-sse</name>
-    <description>nexus-sse</description>
+    <name>nexus-websocket</name>
+    <description>nexus-websocket</description>
 
     <dependencies>
         <dependency>
@@ -23,12 +23,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-thymeleaf</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <optional>true</optional>
         </dependency>
     </dependencies>
 </project>

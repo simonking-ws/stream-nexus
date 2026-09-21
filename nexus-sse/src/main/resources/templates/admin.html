@@ -325,7 +325,7 @@
                     <option value="clientId">clientId</option>
                 </select>
             </label>
-            <input type="text" id="keyword" placeholder="过滤 clientId / 业务模块" oninput="render()" style="width:240px">
+            <input type="text" id="keyword" placeholder="过滤 clientId / IP / 业务模块" oninput="render()" style="width:240px">
             <label style="font-size:12px;color:#475467;display:flex;align-items:center;gap:6px">
                 <input type="checkbox" id="staleOnly" onchange="render()"> 只看疑似失联
             </label>
@@ -336,12 +336,13 @@
             <table>
                 <thead>
                 <tr>
-                    <th style="width:26%">clientId</th>
-                    <th style="width:18%">业务模块</th>
-                    <th style="width:14%">建连时间</th>
-                    <th style="width:14%">最近心跳</th>
-                    <th style="width:16%">静默 / 状态</th>
-                    <th style="width:12%">操作</th>
+                    <th style="width:24%">clientId</th>
+                    <th style="width:12%">客户端 IP</th>
+                    <th style="width:16%">业务模块</th>
+                    <th style="width:13%">建连时间</th>
+                    <th style="width:13%">最近心跳</th>
+                    <th style="width:14%">静默 / 状态</th>
+                    <th style="width:8%">操作</th>
                 </tr>
                 </thead>
                 <tbody id="tbody"></tbody>
@@ -462,7 +463,9 @@ function duration(ms) {
 function matches(it) {
     const kw = document.getElementById('keyword').value.trim().toLowerCase();
     if (!kw) return true;
-    return it.clientId.toLowerCase().includes(kw) || (it.modules || []).join(',').toLowerCase().includes(kw);
+    return it.clientId.toLowerCase().includes(kw)
+        || String(it.ip || '').toLowerCase().includes(kw)
+        || (it.modules || []).join(',').toLowerCase().includes(kw);
 }
 
 function sorted(list) {
@@ -496,7 +499,7 @@ function render() {
         chips.appendChild(chip('暂无模块', 'ghost'));
     }
     modules.forEach(([name, count]) => {
-        chips.appendChild(chip(name + ' · ' + count, name === 'global' ? 'global' : ''));
+        chips.appendChild(chip(name + ' · ' + count, name === '*' ? 'global' : ''));
     });
 
     const tbody = document.getElementById('tbody');
@@ -509,9 +512,14 @@ function render() {
         cid.textContent = it.clientId;
         tr.appendChild(cid);
 
+        const ipt = document.createElement('td');
+        ipt.className = 'cid';
+        ipt.textContent = it.ip || '-';
+        tr.appendChild(ipt);
+
         const mod = document.createElement('td');
         (it.modules || []).forEach(m => {
-            const span = chip(m, m === 'global' ? 'global' : '');
+            const span = chip(m, m === '*' ? 'global' : '');
             span.style.marginRight = '4px';
             mod.appendChild(span);
         });

@@ -24,19 +24,23 @@ public final class SseConstants {
     public static final String SYS_MODULE = "sse";
 
     /**
-     * 全局模块名：订阅 {@code modules} 为空时的默认值，同时是一条「全量通道」。
+     * 全局模块名（{@code *}）：订阅 {@code modules} 为空时的默认值，同时是一条「全量通道」。
      *
      * <p>双向生效：
      * <ul>
      *     <li>订阅侧：{@code modules} 缺省或为空白时，默认订阅该模块；</li>
      *     <li>推送侧：以它为 {@code bizModule} 时广播给全部在线连接；
-     *               以其它模块推送时，订阅它的连接同样会收到（每次按模块推送都带上 global）。</li>
+     *               以其它模块推送时，订阅它的连接同样会收到（每次按模块推送都带上 {@code *}）。</li>
      * </ul>
      *
-     * <p>例外：纯定向推送（只填 {@code clientIds}、无 {@code bizModule}）不扩散给 global 订阅者——
+     * <p>例外：纯定向推送（只填 {@code clientIds}、无 {@code bizModule}）不扩散给 {@code *} 订阅者——
      * 一对一消息不应泄露给无关连接。
+     *
+     * <p>保留名：业务方不得用 {@code *} 命名自己的业务模块，否则会与上述规则混淆。
+     * 它与 {@link #MODULE_WILDCARD} 同形（都是 {@code *}）但**命名空间不同**：
+     * 这里出现在「模块名」位置，那里出现在「模块白名单」位置（表示不限模块）。
      */
-    public static final String GLOBAL_MODULE = "global";
+    public static final String GLOBAL_MODULE = "*";
 
     /**
      * 判断模块名是否为全局模块（忽略大小写，便于订阅侧归一化后与倒排索引对齐）
@@ -102,6 +106,9 @@ public final class SseConstants {
 
     /**
      * 模块白名单通配符：不限制可推送的业务模块
+     *
+     * <p>与 {@link #GLOBAL_MODULE} 同形（都是 {@code *}），但只出现在「应用可推送模块白名单」里，
+     * 语义是「不限模块」，不是「只能推全局模块」。两者各自判断、互不复用。
      */
     public static final String MODULE_WILDCARD = "*";
 }

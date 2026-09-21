@@ -92,8 +92,8 @@
 | 按模块广播 | `/sse/subscribe?clientId=C1&modules=lot,order` | `{"bizModule":"lot", ...}` | 所有订阅了 `lot` 的连接 |
 | 按客户端定向 | —（只要在线即可） | `{"clientIds":["C1"], ...}` | 指定 clientId 的连接 |
 | 两者同时 | — | 两个字段都填 | **并集**，按 clientId 去重 |
-| 全局订阅 | `/sse/subscribe?clientId=C1`（`modules` 留空，默认 `global`） | 任意 `bizModule` 推送 | 每次按模块推送都会收到 |
-| 全局广播 | — | `{"bizModule":"global", ...}` | 全部在线连接 |
+| 全局订阅 | `/sse/subscribe?clientId=C1`（`modules` 留空，默认 `*`） | 任意 `bizModule` 推送 | 每次按模块推送都会收到 |
+| 全局广播 | — | `{"bizModule":"*", ...}` | 全部在线连接 |
 
 `PushRequest` 结构（`groups` 已删除）：
 
@@ -108,13 +108,16 @@ public class PushRequest {
 
 **强制约定**：`bizModule` 是路由键，订阅侧与推送侧取值必须完全一致（含大小写），否则**静默推空**（`total=0`，不报错）。建议维护一份模块命名清单（如 `lot` / `order` / `user`）。
 
-**全局模块 `global`**（`SseConstants.GLOBAL_MODULE`）：
+**全局模块 `*`**（`SseConstants.GLOBAL_MODULE`）：
 
 - 订阅侧：`modules` 缺省或为空白时默认订阅它，避免客户端漏传参数后一条消息都收不到；
-- 推送侧：以 `global` 为目标时广播给全部在线连接；以其它模块为目标时，订阅 `global` 的连接**额外命中**——即每次按模块推送都会带上 global 订阅者；
-- 例外：纯定向推送（只填 `clientIds`）不叠加 global，一对一消息不扩散给无关连接。
+- 推送侧：以 `*` 为目标时广播给全部在线连接；以其它模块为目标时，订阅 `*` 的连接**额外命中**——即每次按模块推送都会带上全局订阅者；
+- 例外：纯定向推送（只填 `clientIds`）不叠加全局模块，一对一消息不扩散给无关连接。
 
-注意：`global` 是业务可见的保留模块名，业务方不要再用它命名自己的业务模块，否则会与上述规则混淆。
+注意：
+
+- `*` 是业务可见的保留模块名，业务方不要再用它命名自己的业务模块，否则会与上述规则混淆；
+- 白名单里也有一个 `*`（`SseConstants.MODULE_WILDCARD`），语义是「该应用不限可推模块」，与全局模块名同形但**命名空间不同**，两者各自判断、不可混用。
 
 ### 3.3 消息 ID 单调递增
 

@@ -88,16 +88,16 @@ public class SsePusher {
     }
 
     /**
-     * 解析目标连接：模块命中 ∪ global 订阅者 ∪ 定向命中，按 clientId 去重
+     * 解析目标连接：模块命中 ∪ 全局模块订阅者 ∪ 定向命中，按 clientId 去重
      *
-     * <p>global 的两条规则：
+     * <p>全局模块（{@code *}）的两条规则：
      * <ul>
-     *     <li>推送目标就是 global → 广播给全部在线连接（{@link SseClientRegistry#all()}）；</li>
-     *     <li>推送目标是其它模块 → 额外带上订阅了 global 的连接，
+     *     <li>推送目标就是 {@code *} → 广播给全部在线连接（{@link SseClientRegistry#all()}）；</li>
+     *     <li>推送目标是其它模块 → 额外带上订阅了 {@code *} 的连接，
      *         保证 {@code modules} 留空的客户端不会「静默收不到」。</li>
      * </ul>
      *
-     * <p>纯定向推送（只填 clientIds）不叠加 global，避免一对一消息扩散给无关连接。
+     * <p>纯定向推送（只填 clientIds）不叠加全局模块，避免一对一消息扩散给无关连接。
      */
     private Collection<SseClient> resolveTargets(PushRequest request) {
         boolean byModule = StringUtils.hasText(request.getBizModule());

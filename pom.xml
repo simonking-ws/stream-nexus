@@ -10,7 +10,7 @@
     </parent>
     <groupId>com.simonking.stream</groupId>
     <artifactId>stream-nexus</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.0.0</version>
     <name>stream-nexus</name>
     <description>stream-nexus</description>
     <packaging>pom</packaging>
@@ -18,10 +18,11 @@
     <modules>
         <module>nexus-common</module>
         <module>nexus-sse</module>
+        <module>nexus-websocket</module>
     </modules>
 
     <properties>
-        <nexus-common.version>1.0.0-SNAPSHOT</nexus-common.version>
+        <nexus-common.version>1.0.0</nexus-common.version>
         <java.version>17</java.version>
     </properties>
 
