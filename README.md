@@ -80,7 +80,7 @@ registry.addMapping("/**")
 2. 推送应用下拉默认选中内置应用 `test`（自动带出 key `test_secret`），业务模块默认 `test`、动作 `bid`，推送内容可直接改 JSON，点「推送」→ 日志出现 `test:bid` 及自定义字段，返回 `{"total":1,"success":1,"failed":0}`。
 3. 把模块改成未订阅的 `order` 再推 → `total=0`（无连接命中，属预期行为）。
 4. 观察日志每 15s 收到一次 `PING`，Network 面板可见 `/sse/pong` 应答。
-5. 访问 `http://localhost:8088/admin`（或根路径 `/`）查看在线连接台账（clientId / 业务模块 / 建连时间 / 最近心跳 / 静默时长），支持过滤、排序、自动刷新与「下线」；切到「推送应用（appId / key）」页签可新增 / 删除应用（apiKey 留空自动生成 GUID）。
+5. 访问 `http://localhost:8088/admin`（或根路径 `/`）查看在线连接台账（clientId / 业务模块 / 建连时间 / 最近心跳 / 静默时长），支持过滤、排序、自动刷新与「下线」；切到「推送应用（appId / key）」页签可新增 / 修改 / 删除应用（apiKey 留空自动生成：GUID → Base64）。
 
 等价于
 `curl http://localhost:8088/sse/admin/connections`、
@@ -232,9 +232,11 @@ restClient.post()
 | `nexus.sse.heartbeat-timeout` | `90s` | 多久没收到 `PONG` 判定失联（应 ≥ 3 倍心跳间隔） |
 | `nexus.sse.max-lifetime` | `0` | 连接最大存活时间（软重置），0 表示不限制 |
 | `nexus.sse.max-connections` | `30000` | 最大连接数，0 表示不限制 |
-| `nexus.sse.auth-enabled` | `true` | 是否开启推送鉴权 |
+| `nexus.sse.auth-enabled` | `true` | 是否开启推送鉴权（谁能推） |
+| `nexus.sse.connect-auth-enabled` | `false` | 是否开启**建连**鉴权（谁能连 `/sse/subscribe`） |
+| `nexus.sse.connect-auth-token` | 空 | 建连令牌，所有订阅方共用；开关打开且留空时建连一律拒绝 |
 
-**推送应用不在这里配置**：内置默认应用 `test` / `test_secret`（白名单 `*`，开箱即用），其余应用在管理页「推送应用（appId / key）」页签运行时增删（apiKey 可自动生成 GUID），改动**仅内存生效，重启回到内置默认应用**。
+**推送应用不在这里配置**：内置默认应用 `test` / `test_secret`（白名单 `*`，开箱即用），其余应用在管理页「推送应用（appId / key）」页签运行时增删改（apiKey 可自动生成：GUID → Base64），改动**仅内存生效，重启回到内置默认应用**。
 
 反向代理（Nginx）下必须关闭缓冲，否则消息会攒在缓冲区不下发：
 

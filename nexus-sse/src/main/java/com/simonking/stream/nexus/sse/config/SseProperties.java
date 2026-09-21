@@ -47,4 +47,22 @@ public class SseProperties {
      * 其余应用在 {@code /admin} 管理页「推送应用」页签增删（仅内存生效）
      */
     private boolean authEnabled = true;
+
+    /**
+     * 是否开启**建连**鉴权（作用于 {@code /sse/subscribe}，默认关闭）
+     *
+     * <p>与 {@link #authEnabled} 是两件事：后者管「谁能推」，这里管「谁能连」。
+     * 默认 false 是为了订阅侧零改动可跑通——浏览器 {@code EventSource} 带不了自定义请求头，
+     * 开启鉴权后客户端必须在查询参数 {@code token} 上带令牌（也支持 {@code X-Sse-Token} 头），
+     * 属于接入方需要配合的破坏性改动，故默认放开。
+     */
+    private boolean connectAuthEnabled = false;
+
+    /**
+     * 建连令牌：所有订阅方共用的共享口令，与 {@link #connectAuthEnabled} 配对配置
+     *
+     * <p>开关打开而此处留空时，建连请求**全部拒绝**（失败关闭）——
+     * 宁可一个都连不上，也不能因为漏配而变相放行。
+     */
+    private String connectAuthToken = "";
 }

@@ -79,6 +79,22 @@ public final class SseConstants {
     public static final String HEADER_API_KEY = "X-Sse-Key";
 
     /**
+     * 建连鉴权请求头：连接令牌（{@code X-Sse-Token}）
+     *
+     * <p>仅在服务端开启建连鉴权时生效，与 {@link #PARAM_CONNECT_TOKEN} 二选一。
+     * 浏览器 {@code EventSource} 无法设置自定义请求头，此时只能用查询参数。
+     */
+    public static final String HEADER_CONNECT_TOKEN = "X-Sse-Token";
+
+    /**
+     * 建连鉴权查询参数名（{@code token}）
+     *
+     * <p>为 {@code EventSource} 这类无法带自定义头的客户端准备的传参通道；
+     * 服务端优先读 {@link #HEADER_CONNECT_TOKEN}，读不到再回退到该参数。
+     */
+    public static final String PARAM_CONNECT_TOKEN = "token";
+
+    /**
      * 鉴权通过后，该密钥允许推送的业务模块写入 {@code HttpServletRequest} 的属性名
      * （供下游做模块白名单校验）
      */

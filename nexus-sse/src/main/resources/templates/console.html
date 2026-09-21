@@ -160,6 +160,29 @@
         .line { border-bottom: 1px dashed #eef0f3; padding: 4px 0; }
         .muted { color: var(--muted); }
         .err { color: var(--danger); font-size: 13px; }
+
+        /* 页脚：项目地址，图标随文字颜色走（currentColor），hover 时一起变蓝 */
+        .footer {
+            max-width: 1180px;
+            margin: 4px auto 0;
+            padding: 16px 28px 0;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: center;
+        }
+
+        .footer a {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+            color: var(--muted);
+            font-size: 12px;
+            transition: .15s;
+        }
+
+        .footer a:hover { color: var(--brand); }
+        .gh-icon { fill: currentColor; }
     </style>
 </head>
 <body>
@@ -189,12 +212,19 @@
                 <label>订阅业务模块 <span class="hint">逗号分隔，留空默认 global；改动会同步进地址</span></label>
                 <input type="text" id="modules" value="test" oninput="syncModules()">
             </div>
+            <div class="field">
+                <label>连接令牌 <span class="hint" th:text="${connectAuthEnabled} ? '服务端已开启建连鉴权，必填；会以 token 参数拼进地址' : '服务端开启建连鉴权时必填；会以 token 参数拼进地址'"></span></label>
+                <input type="text" id="connToken" oninput="syncToken()" th:placeholder="${connectAuthEnabled} ? '必填：缺少令牌将无法建连' : ''">
+            </div>
+            <!-- 服务端开关下发给 JS：未开启时连令牌都不必带 -->
+            <span id="connectAuthEnabled" hidden th:text="${connectAuthEnabled}"></span>
         </div>
         <div class="row" style="margin-top:16px">
             <button class="primary" onclick="connect()">连接</button>
             <button onclick="disconnect()">断开</button>
             <span><span class="dot" id="dot"></span>状态：<span id="status" class="off">未连接</span></span>
             <span class="muted">clientId：<span class="cid" id="clientId">-</span></span>
+            <span id="connTip" class="muted"></span>
         </div>
     </div>
 
@@ -242,6 +272,16 @@
     </div>
 </div>
 
+<footer class="footer">
+    <a href="https://github.com/simonking-ws/stream-nexus" target="_blank" rel="noopener noreferrer"
+       title="Stream Nexus 项目地址">
+        <svg class="gh-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.07-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.15 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A7.995 7.995 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+        <span>github.com/simonking-ws/stream-nexus</span>
+    </a>
+</footer>
+
 <script>
 let es = null;
 let clientId = null;
@@ -253,6 +293,16 @@ const SYS_MODULE = 'sse';   // 系统消息模块，业务路由不匹配即忽�
 const EVT_MESSAGE = 'MESSAGE';
 const EVT_PING = 'PING';
 const EVT_PONG = 'PONG';
+
+// 建连鉴权开启但没带令牌时的统一文案（连接前置校验与 onerror 兜底共用）
+const TOKEN_MISSING_TIP = '需要鉴权令牌：服务端已开启建连鉴权，请先填写「连接令牌」再连接';
+
+/** 订阅区提示（与推送区的 tip 分开，避免连接问题显示在推送卡片里） */
+function connTip(text, isErr) {
+    const el = document.getElementById('connTip');
+    el.className = isErr ? 'err' : 'muted';
+    el.textContent = text;
+}
 
 const bizRoutes = {
     'test:test_msg': m => `消息：${JSON.stringify(m.data)}`,
@@ -301,8 +351,40 @@ function syncModules() {
     document.getElementById('subUrl').value = u.toString();
 }
 
+/** 令牌改动同步进地址：留空则移除该参数（服务端未开启建连鉴权时不带） */
+function syncToken() {
+    const u = currentUrl();
+    const tk = document.getElementById('connToken').value.trim();
+    if (tk) {
+        u.searchParams.set('token', tk);
+        connTip('');   // 填上了就把「需要令牌」的提示撤掉
+    } else {
+        u.searchParams.delete('token');
+    }
+    document.getElementById('subUrl').value = u.toString();
+}
+
+/** 服务端是否开启建连鉴权（由 PageController 下发） */
+function connectAuthEnabled() {
+    return document.getElementById('connectAuthEnabled').textContent.trim() === 'true';
+}
+
+/** 地址 / 输入框里的连接令牌，取当前实际会发出去的那个 */
+function currentToken() {
+    return (currentUrl().searchParams.get('token') || '').trim();
+}
+
 function connect() {
     if (es) return;
+    // 开了建连鉴权却没带令牌：先拦住。否则 EventSource 只会拿到 401，
+    // 而 onerror 拿不到状态码，页面表现为「一直重连中」，看不出是没有令牌
+    if (connectAuthEnabled() && !currentToken()) {
+        connTip(TOKEN_MISSING_TIP, true);
+        log('连接失败：' + TOKEN_MISSING_TIP);
+        document.getElementById('connToken').focus();
+        return;
+    }
+    connTip('');
     // 地址里没有 clientId（被手改删掉）时补一个，否则沿用地址里的那个
     if (!currentUrl().searchParams.get('clientId')) {
         resetUrl();
@@ -316,10 +398,29 @@ function connect() {
 
     es.onopen = () => {
         setStatus('已连接', true);
+        connTip('');
         log('连接建立，请在真实业务中重新拉取全量状态');
     };
 
-    es.onerror = () => setStatus('重连中', false);
+    es.onerror = () => {
+        // 鉴权失败（令牌缺失 / 错误）服务端回 401，浏览器会自动重连且 onerror 拿不到状态码：
+        // 这里主动断开并提示原因，避免页面一直「重连中」却无人知道是令牌的问题
+        if (connectAuthEnabled()) {
+            es.close();
+            es = null;
+            setStatus('未授权', false);
+            if (!currentToken()) {
+                connTip(TOKEN_MISSING_TIP, true);
+                log('连接被拒（401）：' + TOKEN_MISSING_TIP);
+                document.getElementById('connToken').focus();
+            } else {
+                connTip('连接被拒（401）：令牌不正确，请核对后重连', true);
+                log('连接被拒（401）：令牌不正确，请核对后重连');
+            }
+            return;
+        }
+        setStatus('重连中', false);
+    };
 
     // 业务消息（建连消息 sse/connected 也走这里）
     es.addEventListener(EVT_MESSAGE, e => {

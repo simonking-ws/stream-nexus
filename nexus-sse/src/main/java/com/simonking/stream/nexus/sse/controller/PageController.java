@@ -54,5 +54,8 @@ public class PageController {
         model.addAttribute("heartbeatInterval", properties.getHeartbeatInterval().toSeconds());
         model.addAttribute("heartbeatTimeout", properties.getHeartbeatTimeout().toSeconds());
         model.addAttribute("maxConnections", properties.getMaxConnections());
+        // 下发给页面：开启建连鉴权时，推送测试页必须在连接前拦住没填令牌的情况，
+        // 否则 EventSource 只会拿到一个 401 然后无脑重连，页面上看不出原因
+        model.addAttribute("connectAuthEnabled", properties.isConnectAuthEnabled());
     }
 }

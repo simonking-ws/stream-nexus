@@ -1,5 +1,6 @@
 package com.simonking.stream.nexus.sse.config;
 
+import com.simonking.stream.nexus.sse.auth.ConnectAuthInterceptor;
 import com.simonking.stream.nexus.sse.auth.PushAuthInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
@@ -18,6 +19,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebMvcConfig implements WebMvcConfigurer {
 
     private final PushAuthInterceptor pushAuthInterceptor;
+
+    private final ConnectAuthInterceptor connectAuthInterceptor;
 
     /**
      * 全局跨域：作用于 {@code /**} 全部路径（SSE 订阅、推送、运维接口、静态测试页），全量放行
@@ -42,9 +45,14 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .maxAge(3600);
     }
 
+    /**
+     * 两条鉴权链各管一段：{@code /sse/push/**} 验应用凭证（谁能推），
+     * {@code /sse/subscribe} 验建连令牌（谁能连）；后者默认关闭，见 {@link ConnectAuthInterceptor}
+     */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(pushAuthInterceptor).addPathPatterns("/sse/push/**");
+        registry.addInterceptor(connectAuthInterceptor).addPathPatterns("/sse/subscribe");
     }
 
     /**

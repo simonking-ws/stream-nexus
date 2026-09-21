@@ -8,8 +8,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
+import java.nio.ByteBuffer;
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
@@ -87,6 +90,24 @@ public class PushAppRegistry {
             return false;
         }
         return apps.remove(appId.trim()) != null;
+    }
+
+    /**
+     * 生成 apiKey：GUID（16 字节随机数）经 Base64 编码得到
+     *
+     * <p>取 UUID 的 128 位原始字节再编码，而不是对 {@code UUID.toString()} 的 36 字符文本编码——
+     * 后者把「16 字节的随机」膨胀成 48 字节文本再编码成 48 个字符，白长了却没多一分随机性。
+     *
+     * <p>用 URL 安全字符集（{@code -} / {@code _}）且去掉 {@code =} 补位：16 字节 → 22 字符，
+     * 不含 {@code +} / {@code /} / {@code =}，放进请求头、URL 查询参数都不必转义。
+     */
+    public static String generateApiKey() {
+        UUID uuid = UUID.randomUUID();
+        byte[] bytes = new byte[16];
+        ByteBuffer.wrap(bytes)
+                .putLong(uuid.getMostSignificantBits())
+                .putLong(uuid.getLeastSignificantBits());
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     /**

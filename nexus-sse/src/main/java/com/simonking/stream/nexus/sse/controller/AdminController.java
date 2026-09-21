@@ -21,7 +21,6 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * 连接运维接口（供 {@code /admin.html} 管理页使用）
@@ -59,17 +58,17 @@ public class AdminController {
     }
 
     /**
-     * 生成一个随机器 apiKey（GUID），供管理页「自动生成」按钮使用
+     * 生成一个随机 apiKey（GUID → Base64），供管理页「自动生成」按钮使用
      */
     @GetMapping("/apps/generate-key")
     public Map<String, Object> generateKey() {
-        return Map.of("apiKey", UUID.randomUUID().toString());
+        return Map.of("apiKey", PushAppRegistry.generateApiKey());
     }
 
     /**
      * 新增应用：同名已存在时拒绝（避免手滑覆盖线上凭证，覆盖请先删除）
      *
-     * <p>{@code apiKey} 留空则由服务端生成 GUID，避免人工起弱口令。
+     * <p>{@code apiKey} 留空则由服务端生成（GUID → Base64），避免人工起弱口令。
      */
     @PostMapping("/apps")
     public Map<String, Object> addApp(@RequestBody AppRequest body) {
@@ -80,7 +79,7 @@ public class AdminController {
         if (appRegistry.contains(appId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "appId already exists: " + appId);
         }
-        String apiKey = StringUtils.hasText(body.apiKey()) ? body.apiKey().trim() : UUID.randomUUID().toString();
+        String apiKey = StringUtils.hasText(body.apiKey()) ? body.apiKey().trim() : PushAppRegistry.generateApiKey();
         appRegistry.save(new PushApp(appId, apiKey, PushAppRegistry.normalize(body.allowedModules())));
         return Map.of("ok", true, "appId", appId, "apiKey", apiKey);
     }
