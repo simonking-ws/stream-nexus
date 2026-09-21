@@ -1,4 +1,7 @@
-# 单机一键起服务：docker compose up -d --build
+# 单机一键起服务：在 nexus-sse/ 下执行 docker compose up -d --build
+#
+# 注意：编排文件放在 nexus-sse/ 下，但构建上下文必须是仓库根目录（context: ..），
+# 因为 nexus-sse 的父 POM 在根目录且它依赖 nexus-common。
 #
 # 端口 8088 与 application.properties 保持一致；改端口同步改 SERVER_PORT 与端口映射。
 # 配置项一律用环境变量覆盖（Spring 宽松绑定：
@@ -7,9 +10,9 @@
 services:
   stream-nexus:
     build:
-      context: .
-      dockerfile: Dockerfile
-    image: simonking/stream-nexus:1.0.0-SNAPSHOT
+      context: ..
+      dockerfile: nexus-sse/Dockerfile
+    image: simonking/stream-nexus:1.0.0
     container_name: stream-nexus
     restart: unless-stopped
     ports:

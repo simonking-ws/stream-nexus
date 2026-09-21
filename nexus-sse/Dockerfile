@@ -2,13 +2,14 @@
 #
 # 构建上下文必须是仓库根目录（而不是 nexus-sse/）：
 # nexus-sse 的父 POM 在根目录，且它依赖 nexus-common，根目录打包才能一次带上
-#   docker build -t stream-nexus:1.0.0-SNAPSHOT .
-# 或直接用 scripts/docker-build.sh | scripts/docker-build.cmd
+# 所以在仓库根目录执行（本文件移到 nexus-sse/ 后用 -f 指定）：
+#   docker build -f nexus-sse/Dockerfile -t stream-nexus:1.0.0 .
+# 或直接用 nexus-sse/scripts/docker-build.sh | nexus-sse/scripts/docker-build.cmd
 
 FROM maven:3.9-eclipse-temurin-17 AS build
 
 # jar 版本号，与 <version> 保持一致；改版本时用 --build-arg JAR_VERSION=x 覆盖
-ARG JAR_VERSION=1.0.0-SNAPSHOT
+ARG JAR_VERSION=1.0.0
 
 WORKDIR /build
 

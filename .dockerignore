@@ -14,9 +14,9 @@ target
 **/*.log
 
 # 镜像/编排自身不进镜像，避免递归拷自己
-Dockerfile
-.dockerignore
-docker-compose.yml
+# 注意：nexus-sse/Dockerfile 由 docker build -f 指定，不能在这里排除，否则构建时读不到
+nexus-sse/scripts
+nexus-sse/docker-compose.yml
 
 README.md
 LICENSE

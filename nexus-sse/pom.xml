@@ -5,12 +5,12 @@
     <parent>
         <groupId>com.simonking.stream</groupId>
         <artifactId>stream-nexus</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <version>1.0.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <groupId>com.simonking.stream</groupId>
     <artifactId>nexus-sse</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.0.0</version>
     <name>nexus-sse</name>
     <description>nexus-sse</description>
 
