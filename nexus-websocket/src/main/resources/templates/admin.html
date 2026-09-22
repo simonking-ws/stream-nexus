@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title}">WebSocket 连接管理</title>
+    <meta name="color-scheme" content="dark">
+    <link rel="stylesheet" th:href="@{/css/nexus-tech.css}">
+    <style>
+        /* 管理页私有补充：公共科技感主题（深色 / 霓虹 / 动效）见 /css/nexus-tech.css */
+        .toolbar label { font-size: 12px; }
+        .toolbar select, .toolbar input[type=text] { width: auto; }
+        .stat .num.sm { font-size: 18px; }
+        .key-cell input { width: 100%; }
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <div class="brand"><span class="logo">WS</span> <span class="brand-text">Stream Nexus</span></div>
+    <div class="nav">
+        <a th:href="@{/admin}" th:classappend="${active == 'admin'} ? 'active' : ''">连接管理</a>
+        <!-- 推送测试新开标签页：管理页和它经常要对着看（一边看连接台账一边推消息） -->
+        <a th:href="@{/console}" target="_blank" rel="noopener noreferrer"
+           th:classappend="${active == 'console'} ? 'active' : ''">推送测试</a>
+    </div>
+    <div class="meta">
+        <span class="live"><i></i>LIVE</span>
+        <span th:text="'心跳 ' + ${heartbeatInterval} + 's · 失联判定 ' + ${heartbeatTimeout} + 's · 连接上限 ' + ${maxConnections} + ' · WS ' + ${wsPort}"></span>
+    </div>
+</div>
+
+<div class="wrap">
+    <div class="tabs">
+        <button id="tabConnBtn" class="active" onclick="switchTab('conn')">连接台账</button>
+        <button id="tabAppBtn" onclick="switchTab('app')">推送应用</button>
+    </div>
+
+    <!-- ========== 连接台账 ========== -->
+    <div id="tabConn">
+        <div class="card">
+            <div class="stats">
+                <div class="stat">
+                    <div class="label">在线连接</div>
+                    <div class="num" id="total">-</div>
+                </div>
+                <div class="stat">
+                    <div class="label">疑似失联</div>
+                    <div class="num" id="staleCount">-</div>
+                </div>
+                <div class="stat">
+                    <div class="label">项目运行</div>
+                    <div class="num sm" id="uptime">-</div>
+                    <!-- 启动时刻：光看「跑了多久」判断不出是哪次发布起的 -->
+                    <div class="sub" id="startAt">-</div>
+                </div>
+                <div class="stat">
+                    <div class="label">上次刷新</div>
+                    <div class="num sm" id="refreshAt">-</div>
+                </div>
+            </div>
+            <div class="chips" id="moduleChips"></div>
+        </div>
+
+        <div class="card toolbar">
+            <button onclick="load()">刷新</button>
+            <label>自动刷新
+                <select id="interval" onchange="applyInterval()">
+                    <option value="0">关闭</option>
+                    <option value="3000">3 秒</option>
+                    <option value="5000" selected>5 秒</option>
+                    <option value="10000">10 秒</option>
+                </select>
+            </label>
+            <label>排序
+                <select id="sort" onchange="render()">
+                    <option value="createTime">建连时间（新→旧）</option>
+                    <option value="silence">静默时长（长→短）</option>
+                    <option value="clientId">客户端ID</option>
+                </select>
+            </label>
+            <input type="text" id="keyword" placeholder="过滤 客户端ID / IP / 订阅模块" oninput="render()" style="width:240px">
+            <label style="display:flex;align-items:center;gap:6px">
+                <input type="checkbox" id="staleOnly" onchange="render()"> 只看疑似失联
+            </label>
+            <span id="tip" style="color:var(--muted);font-size:12px"></span>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th style="width:22%">客户端ID</th>
+                    <th style="width:11%">客户端 IP</th>
+                    <th style="width:14%">订阅模块</th>
+                    <th style="width:11%">建连时间</th>
+                    <th style="width:11%">最近心跳</th>
+                    <th style="width:12%">静默 / 状态</th>
+                    <th style="width:11%">上行 / 下行</th>
+                    <th style="width:8%">操作</th>
+                </tr>
+                </thead>
+                <tbody id="tbody"></tbody>
+            </table>
+            <div class="empty" id="empty" hidden>暂无连接</div>
+        </div>
+    </div>
+
+    <!-- ========== 推送应用（新增 + 删除同一页签） ========== -->
+    <div id="tabApp" hidden>
+        <div class="card">
+            <h3 class="card-title">新增应用</h3>
+            <p class="card-sub">appId 唯一；apiKey 留空自动生成；模块白名单留空 = 不限制（*）</p>
+            <div class="grid-3">
+                <div class="field">
+                    <label>appId <span class="hint">对应 X-Ws-AppId</span></label>
+                    <input type="text" id="newAppId" placeholder="如 order-service">
+                </div>
+                <div class="field">
+                    <label>apiKey <span class="hint">对应 X-Ws-Key</span></label>
+                    <div class="field-row">
+                        <input type="text" id="newApiKey" placeholder="留空自动生成">
+                        <button onclick="genKey()" title="服务端生成随机密钥">生成</button>
+                    </div>
+                </div>
+                <div class="field">
+                    <label>模块白名单 <span class="hint">逗号分隔，留空=*</span></label>
+                    <input type="text" id="newModules" placeholder="如 lot,order">
+                </div>
+            </div>
+            <div class="toolbar" style="margin-top:16px">
+                <button class="primary" onclick="addApp()">新增应用</button>
+                <span id="appTip" style="color:var(--muted);font-size:12px"></span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 class="card-title">应用列表</h3>
+            <p class="card-sub">
+                /ws/admin/apps · 新增 / 修改 / 删除仅改内存，重启回到内置默认应用；删除后该 appId 的推送立即鉴权失败
+            </p>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th style="width:18%">appId</th>
+                        <th style="width:30%">apiKey</th>
+                        <th style="width:29%">模块白名单</th>
+                        <th style="width:23%">操作</th>
+                    </tr>
+                    </thead>
+                    <tbody id="appBody"></tbody>
+                </table>
+                <div class="empty" id="appEmpty" hidden>暂无应用</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer class="footer">
+    <a href="https://github.com/simonking-ws/stream-nexus" target="_blank" rel="noopener noreferrer"
+       title="Stream Nexus 项目地址">
+        <svg class="gh-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.07-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.15 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A7.995 7.995 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+        <span>github.com/simonking-ws/stream-nexus</span>
+    </a>
+</footer>
+
+<script th:src="@{/js/nexus-tech.js}"></script>
+<script>
+    /* ================= 全局状态 ================= */
+    let items = [], apps = [], meta = {};
+    let knownIds = null;
+    let serverSkew = 0;
+    let prevTotal = null;
+    let timer = null;
+
+    const $ = id => document.getElementById(id);
+
+    /* ================= 工具 ================= */
+    function setTip(id, text, isErr) {
+        const el = $(id);
+        el.textContent = text || '';
+        el.style.color = isErr ? 'var(--danger)' : 'var(--muted)';
+    }
+
+    function setNum(id, value) {
+        const el = $(id);
+        if (window.NexusFX) NexusFX.countTo(el, value); else el.textContent = value;
+    }
+
+    function fmtTime(ts) {
+        if (!ts) return '-';
+        return new Date(ts).toLocaleTimeString('zh-CN', {hour12: false});
+    }
+
+    function durationSec(ms) {
+        const s = Math.floor(ms / 1000);
+        const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600),
+            m = Math.floor(s % 3600 / 60), sec = s % 60;
+        if (d > 0) return d + '天' + h + '时';
+        if (h > 0) return h + '时' + m + '分';
+        if (m > 0) return m + '分' + sec + '秒';
+        return sec + '秒';
+    }
+
+    /** 本机访问：服务端已把 ::1 归一化成 127.0.0.1，这里兼容一下旧连接的原始值 */
+    function isLocalIp(ip) {
+        const v = String(ip || '').trim().toLowerCase();
+        return v === '127.0.0.1' || v === '::1' || v === '0:0:0:0:0:0:0:1' || v === 'localhost';
+    }
+
+    function esc(v) {
+        return v == null ? '' : String(v).replace(/[&<>"']/g, c =>
+            ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+    }
+
+    /* ================= 数据加载 ================= */
+    async function load() {
+        try {
+            const resp = await fetch('/ws/admin/connections');
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            meta = await resp.json();
+            items = meta.items || [];
+            if (meta.serverTime) serverSkew = meta.serverTime - Date.now();
+            $('refreshAt').textContent = new Date().toLocaleTimeString('zh-CN', {hour12: false});
+            if (meta.startTime) $('startAt').textContent = '启动于 ' + new Date(meta.startTime).toLocaleString('zh-CN', {hour12: false});
+            setTip('tip', '');
+            render();
+        } catch (e) {
+            setTip('tip', '拉取失败：' + e.message, true);
+        }
+    }
+
+    async function loadApps() {
+        try {
+            const resp = await fetch('/ws/admin/apps');
+            apps = (await resp.json()).items || [];
+            renderApps();
+        } catch (e) {
+            setTip('appTip', '拉取失败：' + e.message, true);
+        }
+    }
+
+    function applyInterval() {
+        clearInterval(timer);
+        const ms = Number($('interval').value);
+        if (ms > 0) timer = setInterval(load, ms);
+    }
+
+    function paintUptime() {
+        if (!meta.startTime) return;
+        $('uptime').textContent = durationSec(Date.now() + serverSkew - meta.startTime);
+    }
+
+    /* ================= 渲染 ================= */
+    function matches(it) {
+        const kw = $('keyword').value.trim().toLowerCase();
+        if (!kw) return true;
+        return (it.clientId || '').toLowerCase().includes(kw)
+            || (it.ip || '').toLowerCase().includes(kw)
+            || (it.modules || []).join(',').toLowerCase().includes(kw);
+    }
+
+    function render() {
+        const staleOnly = $('staleOnly').checked;
+        const sort = $('sort').value;
+        let list = items.filter(matches);
+        if (staleOnly) list = list.filter(it => it.stale);
+        list.sort((a, b) => sort === 'clientId'
+            ? String(a.clientId).localeCompare(String(b.clientId))
+            : (b[sort] || 0) - (a[sort] || 0));
+
+        const stale = items.filter(it => it.stale).length;
+        const total = meta.total ?? 0;
+        if (prevTotal !== null && prevTotal !== total && window.NexusFX) NexusFX.flash($('total'));
+        prevTotal = total;
+        setNum('total', total);
+        const staleEl = $('staleCount');
+        setNum('staleCount', stale);
+        staleEl.className = 'num' + (stale > 0 ? ' warn' : '');
+
+        // 模块分布
+        const chips = $('moduleChips');
+        chips.innerHTML = '';
+        const mods = Object.entries(meta.modules || {});
+        if (!mods.length) {
+            chips.innerHTML = '<span class="chip ghost">暂无数据</span>';
+        } else {
+            mods.sort((a, b) => b[1] - a[1]).forEach(([m, c]) => {
+                const span = document.createElement('span');
+                span.className = 'chip' + (m === '*' ? ' global' : '');
+                span.textContent = m + ' · ' + c;
+                chips.appendChild(span);
+            });
+        }
+
+        const tbody = $('tbody');
+        tbody.innerHTML = '';
+        $('empty').hidden = list.length > 0;
+        const firstPaint = knownIds === null;
+        list.forEach((it, idx) => {
+            const tr = document.createElement('tr');
+            if (firstPaint) {
+                tr.className = 'row-new';
+                tr.style.animationDelay = Math.min(idx * 35, 700) + 'ms';
+            } else if (!knownIds.has(it.clientId)) {
+                tr.className = 'row-new';
+            }
+            tr.innerHTML =
+                '<td><div class="cid">' + esc(it.clientId) + '</div></td>' +
+                '<td><div class="cid">' + esc(it.ip) + '</div>' +
+                (isLocalIp(it.ip) ? '<div class="sub">本机</div>' : '') + '</td>' +
+                '<td>' + (it.modules || []).map(m => '<span class="chip' + (m === '*' ? ' global' : '') + '">' + esc(m) + '</span>').join(' ') + '</td>' +
+                '<td>' + fmtTime(it.createTime) + '</td>' +
+                '<td>' + fmtTime(it.lastPongTime) + '</td>' +
+                '<td>' + durationSec(it.silence) +
+                ' <span class="badge ' + (it.stale ? 'stale' : 'ok') + '">' + (it.stale ? '失联' : '在线') + '</span></td>' +
+                '<td class="sub">' + it.uplinkCount + ' / ' + it.downlinkCount + '</td>' +
+                '<td><button class="danger" data-kick="' + esc(it.clientId) + '">下线</button></td>';
+            tbody.appendChild(tr);
+        });
+        tbody.querySelectorAll('[data-kick]').forEach(btn =>
+            btn.onclick = () => kick(btn.dataset.kick, btn));
+        knownIds = new Set(items.map(it => it.clientId));
+    }
+
+    function renderApps() {
+        const tbody = $('appBody');
+        tbody.innerHTML = '';
+        $('appEmpty').hidden = apps.length > 0;
+        apps.forEach(app => {
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td class="cid">' + esc(app.appId) + '</td>' +
+                '<td class="key-cell"><input type="text" class="app-key" value="' + esc(app.apiKey) + '"></td>' +
+                '<td><input type="text" class="app-modules" value="' + esc((app.allowedModules || []).join(',')) + '"></td>' +
+                '<td><button class="link" data-save="' + esc(app.appId) + '">保存</button> ' +
+                '<button class="danger" data-del="' + esc(app.appId) + '">删除</button></td>';
+            tbody.appendChild(tr);
+        });
+        tbody.querySelectorAll('[data-save]').forEach(btn =>
+            btn.onclick = () => saveEdit(btn.dataset.save, btn));
+        tbody.querySelectorAll('[data-del]').forEach(btn =>
+            btn.onclick = () => removeApp(btn.dataset.del, btn));
+    }
+
+    /* ================= 操作 ================= */
+    async function kick(clientId, btn) {
+        if (!confirm('确认强制下线 ' + clientId + '？')) return;
+        btn.disabled = true;
+        try {
+            await fetch('/ws/admin/connections/' + encodeURIComponent(clientId), {method: 'DELETE'});
+            await load();
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function saveEdit(appId, btn) {
+        const tr = btn.closest('tr');
+        const body = {
+            apiKey: tr.querySelector('.app-key').value.trim(),
+            allowedModules: tr.querySelector('.app-modules').value.split(',').map(s => s.trim()).filter(Boolean)
+        };
+        btn.disabled = true;
+        try {
+            const resp = await fetch('/ws/admin/apps/' + encodeURIComponent(appId), {
+                method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            setTip('appTip', '已保存 ' + appId);
+            await loadApps();
+        } catch (e) {
+            setTip('appTip', '保存失败：' + e.message, true);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function removeApp(appId, btn) {
+        if (!confirm('确认删除应用 ' + appId + '？删除后该应用立即无法推送')) return;
+        btn.disabled = true;
+        try {
+            await fetch('/ws/admin/apps/' + encodeURIComponent(appId), {method: 'DELETE'});
+            await loadApps();
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function addApp() {
+        const appId = $('newAppId').value.trim();
+        let apiKey = $('newApiKey').value.trim();
+        if (!appId) {
+            setTip('appTip', '应用ID 必填', true);
+            return;
+        }
+        if (!apiKey) {
+            const resp = await fetch('/ws/admin/apps/generate-key');
+            apiKey = (await resp.json()).apiKey;
+        }
+        const modules = $('newModules').value.split(',').map(s => s.trim()).filter(Boolean);
+        try {
+            const resp = await fetch('/ws/admin/apps', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({appId: appId, apiKey: apiKey, allowedModules: modules})
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            $('newAppId').value = '';
+            $('newApiKey').value = '';
+            $('newModules').value = '';
+            setTip('appTip', '已新增 ' + appId);
+            await loadApps();
+        } catch (e) {
+            setTip('appTip', '新增失败：' + e.message, true);
+        }
+    }
+
+    async function genKey() {
+        const resp = await fetch('/ws/admin/apps/generate-key');
+        $('newApiKey').value = (await resp.json()).apiKey;
+    }
+
+    /* ================= 页签 ================= */
+    const TABS = {conn: 'Conn', app: 'App'};
+
+    function switchTab(name) {
+        Object.keys(TABS).forEach(n => {
+            const on = n === name;
+            $('tab' + TABS[n] + 'Btn').classList.toggle('active', on);
+            $('tab' + TABS[n]).hidden = !on;
+        });
+    }
+
+    /* ================= 启动 ================= */
+    load();
+    loadApps();
+    applyInterval();
+    paintUptime();
+    setInterval(paintUptime, 1000);
+</script>
+</body>
+</html>

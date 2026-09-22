@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title}">WebSocket 推送测试</title>
+    <meta name="color-scheme" content="dark">
+    <link rel="stylesheet" th:href="@{/css/nexus-tech.css}">
+    <style>
+        /* 推送测试页私有补充：公共科技感主题（深色 / 霓虹 / 动效）见 /css/nexus-tech.css */
+        input[type=text], select, textarea { width: 100%; }
+        .row button { width: 100px; }
+        .grid button { width: auto; }
+        textarea { font-family: Consolas, "SFMono-Regular", monospace; font-size: 12px; resize: vertical; height: 180px; }
+        #status { font-weight: 600; }
+        .on { color: var(--ok); }
+        .off { color: var(--danger); }
+
+        /* 连接地址那一排：输入框让位、按钮不参与伸缩。
+           反过来按钮会被输入框挤到低于自身文字宽度，于是「重置地址」几个字换行 */
+        .url-row { display: flex; gap: 8px; align-items: center; }
+        .url-row input { flex: 1 1 auto; min-width: 0; }
+        .url-row button { flex: none; white-space: nowrap; }
+
+        .hint-block { color: var(--muted); font-size: 12px; line-height: 1.8; }
+        code { color: var(--brand); font-family: Consolas, "SFMono-Regular", monospace; }
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <div class="brand"><span class="logo">WS</span> <span class="brand-text">Stream Nexus</span></div>
+    <div class="nav">
+        <a th:href="@{/admin}" target="_blank" rel="noopener noreferrer"
+           th:classappend="${active == 'admin'} ? 'active' : ''">连接管理</a>
+        <a th:href="@{/console}" th:classappend="${active == 'console'} ? 'active' : ''">推送测试</a>
+    </div>
+    <div class="meta">
+        <span class="live"><i></i>STREAM</span>
+        <span th:text="'WS ' + ${wsPort} + ' · 心跳 ' + ${heartbeatInterval} + 's · 失联判定 ' + ${heartbeatTimeout} + 's'"></span>
+    </div>
+</div>
+
+<!-- 服务端参数下发：页面里不写死任何常量，改配置即生效 -->
+<span id="cfgWsPort" hidden th:text="${wsPort}"></span>
+<span id="cfgWsPath" hidden th:text="${wsPath}"></span>
+<span id="cfgPublicEndpoint" hidden th:text="${publicEndpoint}"></span>
+<span id="cfgConnectAuthEnabled" hidden th:text="${connectAuthEnabled}"></span>
+<span id="cfgAuthEnabled" hidden th:text="${authEnabled}"></span>
+
+<div class="wrap">
+    <!-- ==================== 连接 ==================== -->
+    <div class="card live" id="cardSub">
+        <h3 class="card-title">WebSocket 连接</h3>
+        <p class="card-sub">模拟一个终端设备：建连 → 应答心跳 → 接收推送</p>
+
+        <div class="field">
+            <label>WebSocket 地址</label>
+            <div class="url-row">
+                <input type="text" id="wsUrl" spellcheck="false">
+                <button onclick="resetUrl()">重置地址</button>
+            </div>
+            <div class="hint">
+                建连只需带订阅模块；客户端ID 由服务端在握手时分配，不需要前端传
+            </div>
+        </div>
+
+        <div class="grid grid-3" style="margin-top:14px">
+            <div class="field">
+                <label>订阅模块 <span class="hint">逗号分隔</span></label>
+                <input type="text" id="modules" value="test" oninput="resetUrl()">
+            </div>
+            <div class="field">
+                <label>建连令牌</label>
+                <input type="text" id="connToken" oninput="resetUrl()"
+                       th:placeholder="${connectAuthEnabled} ? '必填：缺少令牌将无法建连' : '建连鉴权未开启，可留空'">
+            </div>
+            <div class="field">
+                <label>上行消息 <span class="hint">服务端回显一条 ws:echo</span></label>
+                <div class="field-row">
+                    <input type="text" id="upText" placeholder='{"hello":"world"}'>
+                    <button onclick="sendUp()">发送</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 服务端分配的客户端ID：建连后才填；断开即失效，重连会拿到新的 -->
+        <div class="field" style="margin-top:14px">
+            <label>客户端ID <span class="hint">服务端分配</span></label>
+            <div class="field-row">
+                <input type="text" id="clientId" value="未连接" readonly>
+                <button onclick="copyClientId()">复制</button>
+            </div>
+            <div class="hint">
+                定向推送的寻址依据；由服务端在握手时生成（UUID），<b>重连即换</b>，
+                要按用户维度稳定寻址请用模块订阅
+            </div>
+        </div>
+
+        <div class="row" style="margin-top:14px">
+            <button class="primary" onclick="connect()">连接</button>
+            <button onclick="disconnect()">断开</button>
+            <span class="dot" id="dot"></span>
+            <span id="status" class="off">未连接</span>
+            <span class="muted">心跳 <b id="pingCount">0</b> 次</span>
+        </div>
+        <div class="err" id="connTip"></div>
+    </div>
+
+    <!-- ==================== 推送 ==================== -->
+    <div class="card">
+        <h3 class="card-title">推送消息</h3>
+        <p class="card-sub">走 REST 接口 <code th:text="${pushPath}">/ws/push</code>；业务系统接入也是调这个接口</p>
+
+        <div class="grid grid-3">
+            <div class="field">
+                <label>应用 appId <span class="hint">对应 X-Ws-AppId</span></label>
+                <select id="appSelect"></select>
+            </div>
+            <div class="field">
+                <label>密钥 apiKey <span class="hint">对应 X-Ws-Key</span></label>
+                <input type="text" id="appKey" spellcheck="false">
+            </div>
+            <div class="field">
+                <label>业务模块</label>
+                <input type="text" id="bizModule" value="test">
+            </div>
+        </div>
+
+        <div class="grid grid-3" style="margin-top:14px">
+            <div class="field">
+                <label>动作 action</label>
+                <input type="text" id="action" value="test_msg">
+            </div>
+            <div class="field">
+                <label>定向推送</label>
+                <label class="hint" style="display:flex;align-items:center;gap:6px;font-size:12px">
+                    <input type="checkbox" id="directOnly" checked style="width:14px"> 只推给当前连接
+                </label>
+            </div>
+            <div class="field">
+                <label>&nbsp;</label>
+                <button class="primary" onclick="push()">推送</button>
+            </div>
+        </div>
+
+        <div class="field" style="margin-top:14px">
+            <label>消息体 data（JSON）</label>
+            <textarea id="payload" spellcheck="false">{
+  "msg": "hello stream nexus",
+  "seq": 1
+}</textarea>
+        </div>
+        <div class="sub" id="pushTip"></div>
+    </div>
+
+    <!-- ==================== 日志 ==================== -->
+    <div class="card">
+        <h3 class="card-title">消息日志</h3>
+        <p class="card-sub">
+            下行：<code>CONNECTED</code> 建连回执 · <code>MESSAGE</code> 业务消息 ·
+            <code>PING</code> 心跳（客户端自动回 PONG）
+        </p>
+        <div class="row" style="margin-bottom:10px">
+            <button onclick="clearLog()">清空</button>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)">
+                <input type="checkbox" id="hidePing" checked style="width:14px"> 隐藏心跳
+            </label>
+        </div>
+        <div id="log"></div>
+    </div>
+
+    <!-- ==================== 接入说明 ==================== -->
+    <div class="card">
+        <h3 class="card-title">接入说明</h3>
+        <div class="hint-block">
+            1. 终端（浏览器 / H5 / App）连 <code>ws://host:<span th:text="${wsPort}">9090</span><span
+                th:text="${wsPath}">/ws</span>?modules=test</code>，只负责收消息；<br>
+            2. 客户端ID 由<b>服务端</b>在握手时生成（UUID），随
+            <code>{"event":"CONNECTED"}</code> 回执下发给终端，前端不需要传任何标识；<br>
+            3. 业务系统调用 REST 接口 <code>POST <span th:text="${pushPath}">/ws/push</span></code>
+            （请求头 <code>X-Ws-AppId</code> / <code>X-Ws-Key</code>）即可推送，无需编写任何 Netty 代码；<br>
+            4. 两个端口在同一进程内共享连接注册表：REST 收到推送 → 查注册表 → 直接写 WebSocket 通道；<br>
+            5. 客户端ID <b>重连即换</b>：要按用户维度稳定寻址请用<b>模块订阅</b>，
+            或在业务系统侧维护「用户 → 当前 clientId」的映射（终端建连后上报）；<br>
+            6. 心跳是<b>应用级</b>的（浏览器收不到协议层 ping/pong 帧），客户端收到
+            <code>{"event":"PING"}</code> 必须回 <code>{"event":"PONG"}</code>。
+        </div>
+    </div>
+</div>
+
+<footer class="footer">
+    <a href="https://github.com/simonking-ws/stream-nexus" target="_blank" rel="noopener noreferrer"
+       title="Stream Nexus 项目地址">
+        <svg class="gh-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.07-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.15 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A7.995 7.995 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+        <span>github.com/simonking-ws/stream-nexus</span>
+    </a>
+</footer>
+
+<script th:src="@{/js/nexus-tech.js}"></script>
+<script>
+    /* ================= 协议常量：与服务端 WsEvent / WsConstants 一一对应 ================= */
+    const SYS_MODULE = 'ws';
+    const EVT_CONNECTED = 'CONNECTED';
+    const EVT_MESSAGE = 'MESSAGE';
+    const EVT_PING = 'PING';
+    const EVT_PONG = 'PONG';
+
+    const $ = id => document.getElementById(id);
+    const cfg = id => ($(id).textContent || '').trim();
+    const TOKEN_MISSING_TIP = '建连鉴权已开启，缺少令牌将无法建连';
+
+    let ws = null;
+    let clientId = '';   // 服务端建连回执下发的客户端ID，断开即失效
+    let pingCount = 0;
+    const lastTs = {};
+
+    const connectAuthEnabled = () => cfg('cfgConnectAuthEnabled') === 'true';
+    const authEnabled = () => cfg('cfgAuthEnabled') === 'true';
+
+    /* ================= 地址 ================= */
+    function wsHost() {
+        return cfg('cfgPublicEndpoint') || (location.hostname + ':' + cfg('cfgWsPort'));
+    }
+
+    function buildUrl() {
+        const url = new URL('ws://' + wsHost() + cfg('cfgWsPath'));
+        // 只带订阅模块：客户端ID 由服务端分配，不进地址
+        url.searchParams.set('modules', $('modules').value || '*');
+        if (connectAuthEnabled() && $('connToken').value.trim()) {
+            url.searchParams.set('token', $('connToken').value.trim());
+        }
+        return url;
+    }
+
+    function resetUrl() {
+        $('wsUrl').value = buildUrl().toString();
+    }
+
+    /** 复制服务端分配的客户端ID，方便粘到定向推送里验证 */
+    function copyClientId() {
+        if (!clientId) {
+            log('尚未建连，还没有客户端ID');
+            return;
+        }
+        navigator.clipboard.writeText(clientId)
+            .then(() => log('已复制客户端ID：' + clientId))
+            .catch(() => log('复制失败，请手动选中输入框内容', true));
+    }
+
+    /* ================= 日志 ================= */
+    function log(text, highlight) {
+        const box = $('log');
+        const line = document.createElement('div');
+        line.className = 'line' + (highlight ? ' ok-text' : '');
+        line.textContent = '[' + new Date().toLocaleTimeString('zh-CN', {hour12: false}) + '] ' + text;
+        box.appendChild(line);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function clearLog() {
+        $('log').innerHTML = '';
+    }
+
+    /* ================= 连接 ================= */
+    function setStatus(text, on) {
+        $('status').textContent = text;
+        $('status').className = on ? 'on' : 'off';
+        $('dot').className = 'dot' + (on ? ' on' : '');
+    }
+
+    function connect() {
+        if (ws) return;
+        if (connectAuthEnabled() && !$('connToken').value.trim()) {
+            $('connTip').textContent = TOKEN_MISSING_TIP;
+            log('连接失败：' + TOKEN_MISSING_TIP);
+            $('connToken').focus();
+            return;
+        }
+        $('connTip').textContent = '';
+        resetUrl();
+
+        try {
+            ws = new WebSocket($('wsUrl').value);
+        } catch (e) {
+            log('连接失败：' + e.message);
+            ws = null;
+            return;
+        }
+
+        ws.onopen = () => {
+            setStatus('已连接', true);
+            log('WebSocket 连接建立，等待建连回执 ...');
+        };
+
+        ws.onmessage = event => {
+            let msg;
+            try {
+                msg = JSON.parse(event.data);
+            } catch (e) {
+                log('收到非 JSON 报文：' + event.data);
+                return;
+            }
+            if (msg.event === EVT_PING) {
+                pingCount++;
+                $('pingCount').textContent = pingCount;
+                pong();
+                if (!$('hidePing').checked) log('心跳 PING -> 已回 PONG');
+                return;
+            }
+            if (msg.bizModule === SYS_MODULE && msg.action === 'echo') {
+                log('上行回显：' + JSON.stringify(msg.data));
+                return;
+            }
+            const key = (msg.bizModule || '-') + ':' + (msg.action || '-');
+            if (msg.ts && lastTs[key] && msg.ts <= lastTs[key]) {
+                return;   // 丢弃乱序 / 旧消息
+            }
+            if (msg.ts) lastTs[key] = msg.ts;
+            if (msg.event === EVT_CONNECTED) {
+                // 服务端分配的客户端ID：定向推送的寻址依据，断开即失效
+                clientId = (msg.data && msg.data.clientId) || '';
+                $('clientId').value = clientId || '未连接';
+                log('建连回执：' + JSON.stringify(msg.data), true);
+                return;
+            }
+            log(key + ' -> ' + (msg.data === undefined ? '' : JSON.stringify(msg.data)));
+        };
+
+        ws.onerror = () => {
+            setStatus(connectAuthEnabled() ? '未授权' : '异常', false);
+            if (connectAuthEnabled()) {
+                $('connTip').textContent = '连接被拒：令牌不正确或地址不可达';
+            }
+        };
+
+        ws.onclose = event => {
+            setStatus('已断开 (' + event.code + ')', false);
+            log('连接关闭, code=' + event.code + ', reason=' + (event.reason || '-'));
+            ws = null;
+            clientId = '';
+        };
+    }
+
+    function pong() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({event: EVT_PONG, ts: Date.now()}));
+    }
+
+    function disconnect() {
+        if (!ws) return;
+        ws.close(1000, 'bye');
+        ws = null;
+        setStatus('已断开', false);
+    }
+
+    function sendUp() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            log('未连接，无法发送');
+            return;
+        }
+        const text = $('upText').value.trim() || '{}';
+        let data = text;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            /* 非 JSON 时按字符串原样上报 */
+        }
+        ws.send(JSON.stringify({
+            event: EVT_MESSAGE, bizModule: $('bizModule').value || 'test',
+            action: 'up', ts: Date.now(), data: data
+        }));
+        log('已发送上行消息：' + text);
+    }
+
+    /* ================= 推送 ================= */
+    async function loadApps() {
+        try {
+            const resp = await fetch('/ws/admin/apps');
+            const data = await resp.json();
+            const apps = data.items || [];
+            const select = $('appSelect');
+            select.innerHTML = '';
+            apps.forEach(app => {
+                const opt = document.createElement('option');
+                opt.value = app.appId;
+                opt.textContent = app.appId;
+                select.appendChild(opt);
+            });
+            const def = apps.find(a => a.appId === 'test') || apps[0];
+            if (def) {
+                select.value = def.appId;
+                $('appKey').value = def.apiKey || '';
+            }
+            if (!authEnabled()) $('appKey').placeholder = '推送鉴权未开启，可留空';
+        } catch (e) {
+            $('pushTip').textContent = '应用列表拉取失败：' + e.message;
+        }
+    }
+
+    async function push() {
+        let data;
+        try {
+            data = JSON.parse($('payload').value || '{}');
+        } catch (e) {
+            $('pushTip').textContent = '消息体不是合法 JSON：' + e.message;
+            return;
+        }
+        data.ts = Date.now();   // ts 由页面统一填充：客户端据此丢弃乱序 / 旧消息
+        const body = {bizModule: $('bizModule').value.trim(), action: $('action').value.trim(), data: data};
+        if ($('directOnly').checked && clientId) body.clientIds = [clientId];
+
+        $('pushTip').textContent = '推送中 ...';
+        try {
+            const resp = await fetch('/ws/push', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Ws-AppId': $('appSelect').value,
+                    'X-Ws-Key': $('appKey').value.trim()
+                },
+                body: JSON.stringify(body)
+            });
+            const result = await resp.json();
+            if (!resp.ok) {
+                $('pushTip').textContent = '推送失败：' + (result.message || resp.status);
+                log('推送失败：' + JSON.stringify(result));
+                return;
+            }
+            $('pushTip').textContent = '推送完成：命中 ' + result.total + ' / 成功 ' + result.success + ' / 失败 ' + result.failed;
+            log('推送结果：' + JSON.stringify(result), true);
+        } catch (e) {
+            $('pushTip').textContent = '推送失败：' + e.message;
+        }
+    }
+
+    /* ================= 启动 ================= */
+    $('appSelect').onchange = async () => {
+        const resp = await fetch('/ws/admin/apps');
+        const app = ((await resp.json()).items || []).find(a => a.appId === $('appSelect').value);
+        if (app) $('appKey').value = app.apiKey || '';
+    };
+
+    resetUrl();
+    loadApps();
+</script>
+</body>
+</html>

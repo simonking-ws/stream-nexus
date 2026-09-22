@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.simonking.nexus</groupId>
+    <artifactId>nexus-websocket-client</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+    <name>nexus-websocket-client</name>
+    <description>
+        nexus-websocket 的独立客户端：基于 JDK HttpClient 的 REST 推送 SDK（无 Netty 依赖）。
+        刻意不继承 stream-nexus 父 POM、不依赖任何 nexus-* 模块，业务项目引入它即可推送消息，
+        无需编写任何 Netty / WebSocket 服务端代码。
+    </description>
+
+    <properties>
+        <maven.compiler.release>17</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <jackson.version>2.18.2</jackson.version>
+        <slf4j.version>2.0.13</slf4j.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- 本模块没有父 POM，Maven 3.8 默认绑定的 compiler 插件版本过低（3.1，不认识 release 参数），
+                 这里显式指定版本，保证与服务端一样按 Java 17 编译 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

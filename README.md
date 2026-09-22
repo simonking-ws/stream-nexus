@@ -1,12 +1,17 @@
 # Stream-Nexus
 
-一个基于 SSE（Server-Sent Events）的**轻量级实时推送服务**：业务系统通过 HTTP 把消息灌进来，服务端负责连接管理、按业务模块路由与消息扇出，浏览器用原生 `EventSource` 接收。
+一个**轻量级实时推送服务**集合：服务端负责连接管理、按业务模块路由与消息扇出，业务系统只管把消息灌进来。
 
 零中间件依赖（无 Redis / MQ / 数据库），全内存运行，独立部署，与业务进程解耦。
 
-- 技术栈：Spring Boot 4.1.1 / Java 17 / Spring MVC（`spring-boot-starter-webmvc`）
-- 模块：`nexus-common`（跨模块契约） + `nexus-sse`（推送服务实现，默认端口 8088）
-- 完整设计文档：[docs/SSE推送系统设计文档.md](docs/SSE推送系统设计文档.md)
+| 通道 | 模块 | 终端接入 | 业务系统接入 | 端口 |
+| --- | --- | --- | --- | --- |
+| SSE | `nexus-sse` | 原生 `EventSource` | HTTP `POST /sse/push` | 8088 |
+| WebSocket | `nexus-websocket` | 原生 `WebSocket` | HTTP `POST /ws/push`（`nexus-websocket-client` SDK） | 9090 / 8089 |
+
+- 技术栈：Spring Boot 4.1.1 / Java 17 / Spring MVC（`spring-boot-starter-webmvc`）+ Netty 4.2
+- 模块：`nexus-common`（跨模块契约） + `nexus-sse`（SSE 推送服务） + `nexus-websocket`（WebSocket 推送服务） + `nexus-websocket-client`（独立客户端 SDK）
+- 完整设计文档：[docs/SSE推送系统设计文档.md](docs/SSE推送系统设计文档.md)；WebSocket 通道设计原型见 [《神了，WebSocket 竟然可以这么设计！》](https://juejin.cn/post/7592079304924889098)
 
 ---
 
@@ -301,7 +306,95 @@ chunked_transfer_encoding on;
 
 明确非目标：消息必达、离线补推、跨实例路由、消息持久化、端到端加密。
 
-## 十、目录结构
+---
+
+## 十、WebSocket 推送通道（nexus-websocket）
+
+与 SSE 通道定位互补：SSE 是「HTTP 生态、单向、浏览器原生重连」，
+WebSocket 是「全双工、可上行、适合高频交互」。两者**协议与端口完全独立**，可同时部署。
+
+设计原型：WebSocket 服务独立部署，业务系统不写任何 Netty / WebSocket 服务端代码，
+而是通过「REST 接口（或独立客户端 SDK）」把消息交给它，由它转发给终端。
+
+```
+   浏览器 / H5 / App
+          │  ws://host:9090/ws?modules=test   （只带订阅模块）
+          ▼
+   nexus-websocket（独立部署，一个进程两组端口）
+     ├── 9090  Netty WebSocket —— 终端长连接
+     └── 8089  HTTP            —— REST 推送入口 / 管理界面 / 测试页 / 运维接口
+          ▲
+          │  HTTP POST /ws/push（只负责推消息）
+   业务系统 ← nexus-websocket-client（或直接 HTTP 调用）
+```
+
+Netty 与 Spring MVC 在**同一进程内共享连接注册表**：REST 收到推送 → 查注册表 → 直接写 WebSocket 通道。
+
+### 连接的唯一标识：客户端ID
+
+由**服务端**在握手时生成（UUID），用作注册表主键与定向推送的寻址依据，
+随 `CONNECTED` 回执下发给终端；前端不需要传任何标识。
+
+```json
+{"id":"...","event":"CONNECTED","bizModule":"ws","action":"connected","ts":...,"data":{"clientId":"6f1d2a3c-8b47-4e9a-9f21-0c3d5e7a1b24","modules":["test"],"heartbeatInterval":15000}}
+```
+
+- **服务端分配的代价是「重连即换」**：终端断开再连会拿到新ID。
+  要按用户维度稳定寻址，优先用**模块订阅**（`?modules=xxx`），
+  或在业务系统侧维护「用户 → 当前 clientId」映射（终端每次建连后上报刷新）。
+- 不让客户端自带ID 是有意的：自带意味着客户端可以声明任意身份，
+  服务端要么承担被冒用的风险，要么再叠一层令牌校验。
+- 业务系统做定向推送时填 `clientIds`（沿用 `nexus-common` 通用契约）。
+
+### 启动与验证
+
+```bash
+mvn -pl nexus-websocket -am package -DskipTests
+java -jar nexus-websocket/target/nexus-websocket-1.0.0.jar
+```
+
+1. <http://localhost:8089/admin> 连接管理页（默认页）：在线连接台账、模块分布、强制下线、推送应用管理
+2. <http://localhost:8089/console> 推送测试页：建连 → 应答心跳 → 推送 → 看日志
+3. 业务系统引入 `nexus-websocket-client` 后运行 `PushDemo` 的 `main`，即可看到消息落到页面
+
+### REST 推送接口
+
+```bash
+curl -X POST http://localhost:8089/ws/push \
+  -H 'Content-Type: application/json' \
+  -H 'X-Ws-AppId: test' \
+  -H 'X-Ws-Key: test_secret' \
+  -d '{"bizModule":"test","action":"bid","data":{"itemId":"L123"}}'
+```
+
+```json
+{"messageId":"1758123456789-1","total":2,"success":2,"failed":0}
+```
+
+状态码：200 成功；400 请求体为空或 `bizModule` / `clientIds` 都为空；401 凭证不配对；403 模块不在白名单。
+
+### WebSocket 消息体
+
+```json
+{"id":"1758123456789","event":"MESSAGE","bizModule":"test","action":"bid","ts":1758123456789,"data":{}}
+```
+
+`event`：`CONNECTED`（建连回执）/ `MESSAGE`（业务消息）/ `PING`（下行心跳）/ `PONG`（上行应答）/ `KICKED`（强制下线）。
+浏览器 `WebSocket` 对象**收不到协议层 ping/pong 帧**，因此心跳必须是应用级消息：
+客户端收到 `{"event":"PING"}` 必须回 `{"event":"PONG"}`，否则 90s 后被判定失联回收。
+
+### 主要配置（`nexus.ws.*`）
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `ws-port` / `ws-path` | `9090` / `/ws` | WebSocket 监听端口与握手路径 |
+| `server.port` | `8089` | REST 推送 / 管理界面端口，应对公网只暴露 WS，REST 只对内网开放 |
+| `heartbeat-interval` / `heartbeat-timeout` | `15s` / `90s` | WS 心跳间隔与失联阈值 |
+| `max-connections` | `30000` | 最大 WS 连接数，0 = 不限 |
+| `auth-enabled` | `true` | 推送鉴权（`X-Ws-AppId` + `X-Ws-Key`） |
+| `connect-auth-enabled` / `connect-auth-token` | `false` / - | 建连鉴权（查询参数 `token`） |
+
+## 十一、目录结构
 
 ```
 stream-nexus
@@ -333,4 +426,19 @@ stream-nexus
         └── resources/templates/                 # Thymeleaf 页面
             ├── admin.html                       # 连接管理页（默认页：在线台账 / 强制下线）
             └── console.html                     # 推送测试页（建连 / 推送 / 鉴权验证）
+├── nexus-websocket/            # WebSocket 推送服务（Netty + Spring MVC，端口 9090 / 8089）
+│   └── src/main/java/com/simonking/nexus/websocket
+│       ├── NettyServerRunner.java              # Netty 服务独立线程启动
+│       ├── server/
+│       │   ├── WebSocketNettyServer.java       # 9090：终端建连（握手校验 → 协议升级 → 心跳 → 业务）
+│       │   └── handler/                        # WsHandshakeHandler / WsFrameHandler
+│       ├── registry/WsClientRegistry.java      # 连接主表 + 模块倒排 + 统一回收
+│       ├── core/                               # WsPusher（寻址 + 扇出）/ PushService（推送校验）
+│       └── controller/                         # 页面跳转 / REST 推送 / 运维接口
+└── nexus-websocket-client/     # 独立客户端 SDK（无父 POM、不依赖任何 nexus-* 模块）
+    ├── README.md                               # 接入文档
+    └── src/main/java/com/simonking/nexus/ws/client
+        ├── NexusWsClient.java                  # 推送（同步 / 异步），基于 JDK HttpClient
+        ├── ClientOptions.java                  # 全部参数（Builder）
+        └── model/                              # PushRequest / PushResult（独立定义）
 ```

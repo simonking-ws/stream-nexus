@@ -19,6 +19,8 @@
         <module>nexus-common</module>
         <module>nexus-sse</module>
         <module>nexus-websocket</module>
+        <!-- 独立客户端 SDK：不继承本父 POM、不依赖任何 nexus-* 模块，仅在此聚合构建 -->
+        <module>nexus-websocket-client</module>
     </modules>
 
     <properties>
