@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.lang.management.ManagementFactory;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +34,14 @@ import java.util.Map;
 @RequestMapping("/sse/admin")
 @RequiredArgsConstructor
 public class AdminController {
+
+    /**
+     * 进程启动时刻：运维关心的「项目跑了多久」从这一刻算起。
+     *
+     * <p>取 JVM 启动时间而非 Bean 初始化时间——进程起来的那一刻就已经占着端口了，
+     * 用它最接近运维体感；静态常量避免每次请求都去问一次 MXBean。
+     */
+    private static final long START_TIME = ManagementFactory.getRuntimeMXBean().getStartTime();
 
     private final SseClientRegistry registry;
 
@@ -127,6 +136,9 @@ public class AdminController {
      *
      * <p>额外下发 {@code serverTime} 与 {@code heartbeatTimeout}：管理页据此算「静默时长」和
      * 「疑似失联」，避免依赖浏览器本机时钟（与服务端有偏差时心跳判读会失真）。
+     *
+     * <p>{@code startTime} / {@code uptime} 供台账展示「项目已运行多久」：同理用服务端时钟算，
+     * 页面只负责格式化。
      */
     @GetMapping("/connections")
     public Map<String, Object> connections() {
@@ -138,6 +150,8 @@ public class AdminController {
         result.put("total", registry.size());
         result.put("modules", registry.moduleStats());
         result.put("serverTime", now);
+        result.put("startTime", START_TIME);
+        result.put("uptime", Math.max(now - START_TIME, 0));
         result.put("heartbeatTimeout", properties.getHeartbeatTimeout().toMillis());
         result.put("items", items);
         return result;

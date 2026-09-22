@@ -121,18 +121,61 @@ public class SseController {
     /**
      * 解析客户端 IP：优先信任代理头（Nginx 反代下 remoteAddr 只会是网关地址），
      * 取不到再退回 TCP 对端地址。仅供台账展示，不参与任何鉴权判定。
+     *
+     * <p>取到的地址统一过一遍 {@link #normalizeIp(String)}：本机（localhost）访问在开了 IPv6 的
+     * 机器上，Tomcat 给的是 {@code 0:0:0:0:0:0:0:1} 而不是 127.0.0.1，直接进台账既认不出来
+     * 也没法按 IP 过滤；双栈环境下常见的 {@code ::ffff:1.2.3.4} 一并归一成点分十进制。
      */
     private String resolveClientIp(HttpServletRequest request) {
-        String xff = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(xff)) {
-            // 多层代理形如 "client, proxy1, proxy2"，最左是真实客户端
-            return xff.split(",")[0].trim();
+        String ip = firstIp(request.getHeader("X-Forwarded-For"));
+        if (!StringUtils.hasText(ip)) {
+            ip = firstIp(request.getHeader("X-Real-IP"));
         }
-        String realIp = request.getHeader("X-Real-IP");
-        if (StringUtils.hasText(realIp)) {
-            return realIp.trim();
+        if (!StringUtils.hasText(ip)) {
+            ip = request.getRemoteAddr();
         }
-        return request.getRemoteAddr();
+        return normalizeIp(ip);
+    }
+
+    /**
+     * 代理链形如 {@code "client, proxy1, proxy2"}，最左才是真实客户端；
+     * 部分网关拿不到时会填 {@code unknown}，直接跳过继续往右找
+     */
+    private String firstIp(String header) {
+        if (!StringUtils.hasText(header)) {
+            return null;
+        }
+        for (String part : header.split(",")) {
+            String v = part.trim();
+            if (StringUtils.hasText(v) && !"unknown".equalsIgnoreCase(v)) {
+                return v;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 归一化展示用的 IP：IPv6 环回 → {@code 127.0.0.1}，IPv4 映射的 IPv6 → 点分十进制
+     */
+    private String normalizeIp(String ip) {
+        String v = ip == null ? "" : ip.trim();
+        if (!StringUtils.hasText(v)) {
+            return "-";
+        }
+        // 带方括号的 IPv6（[::1]:8080 这类带端口的写法）
+        if (v.startsWith("[") && v.contains("]")) {
+            v = v.substring(1, v.indexOf(']'));
+        }
+        // IPv4 映射的 IPv6：::ffff:1.2.3.4 → 1.2.3.4（末段是点分十进制，IPv6 分组不会出现点）
+        int lastColon = v.lastIndexOf(':');
+        if (lastColon >= 0 && v.substring(lastColon + 1).indexOf('.') > 0) {
+            v = v.substring(lastColon + 1);
+        }
+        // IPv6 环回（::1 的完整写法是 0:0:0:0:0:0:0:1）→ 统一成 127.0.0.1
+        if ("::1".equals(v) || "0:0:0:0:0:0:0:1".equals(v)) {
+            v = "127.0.0.1";
+        }
+        return v;
     }
 
     private Map<String, Object> buildWelcome(String clientId, Set<String> modules) {

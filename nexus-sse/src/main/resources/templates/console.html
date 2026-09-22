@@ -4,206 +4,53 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title th:text="${title}">SSE 推送测试</title>
+    <meta name="color-scheme" content="dark">
+    <link rel="stylesheet" th:href="@{/css/nexus-tech.css}">
     <style>
-        :root {
-            --brand: #2563eb;
-            --brand-soft: #eef4ff;
-            --border: #e6e8eb;
-            --text: #1f2328;
-            --muted: #8b949e;
-            --danger: #d92d20;
-            --ok: #1a7f37;
-        }
-
-        * { box-sizing: border-box; }
-
-        body {
-            margin: 0;
-            padding: 0 0 40px;
-            font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
-            color: var(--text);
-            background: #f4f6fa;
-            font-size: 14px;
-        }
-
-        .topbar {
-            background: #fff;
-            border-bottom: 1px solid var(--border);
-            padding: 14px 28px;
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 16px;
-        }
-
-        .brand { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700; }
-
-        .logo {
-            width: 26px;
-            height: 26px;
-            border-radius: 8px;
-            background: linear-gradient(135deg, #2563eb, #38bdf8);
-            color: #fff;
-            font-size: 13px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .nav { display: flex; gap: 6px; }
-
-        .nav a {
-            text-decoration: none;
-            color: #475467;
-            padding: 6px 14px;
-            border-radius: 999px;
-            font-size: 13px;
-            transition: .15s;
-        }
-
-        .nav a:hover { background: var(--brand-soft); color: var(--brand); }
-
-        .nav a.active {
-            background: var(--brand);
-            color: #fff;
-            box-shadow: 0 2px 6px rgba(37, 99, 235, .28);
-        }
-
-        .meta { color: var(--muted); font-size: 12px; margin-left: auto; }
-
-        .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 28px 0; }
-
-        .card {
-            background: #fff;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 18px 20px;
-            margin-bottom: 16px;
-            box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
-        }
-
-        .card-title { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
-        .card-sub { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
-
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-
-        .field { display: flex; flex-direction: column; gap: 6px; }
-        .field label { font-size: 12px; color: #475467; font-weight: 600; }
-        .field .hint { font-size: 11px; color: var(--muted); font-weight: 400; }
-
-        input[type=text], select, textarea {
-            padding: 7px 10px;
-            border: 1px solid #d0d5dd;
-            border-radius: 8px;
-            font-size: 13px;
-            background: #fff;
-            outline: none;
-            transition: .15s;
-            width: 100%;
-        }
-
-        input[type=text]:focus, select:focus, textarea:focus {
-            border-color: var(--brand);
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
-        }
-
+        /* 推送测试页私有补充：公共科技感主题（深色 / 霓虹 / 动效）见 /css/nexus-tech.css */
+        input[type=text], select, textarea { width: 100%; }
+        .row button { width: 100px; }
+        .grid button { width: auto; }
         textarea { font-family: Consolas, "SFMono-Regular", monospace; font-size: 12px; resize: vertical; height: 180px; }
-
-        button {
-            width: 100px;
-            padding: 7px 14px;
-            border-radius: 8px;
-            border: 1px solid #d0d5dd;
-            background: #fff;
-            color: #344054;
-            font-size: 13px;
-            cursor: pointer;
-            transition: .15s;
-        }
-
-        button:hover { background: #f4f6fa; }
-
-        button.primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
-        button.primary:hover { background: #1d4ed8; }
-
-        .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-
         #status { font-weight: 600; }
         .on { color: var(--ok); }
         .off { color: var(--danger); }
 
-        .dot {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--danger);
-            margin-right: 6px;
-        }
+        /* 连接地址那一排：输入框让位、按钮不参与伸缩。
+           反过来按钮会被输入框挤到低于自身文字宽度，于是「重生成」三个字换行 */
+        .url-row { display: flex; gap: 8px; align-items: center; }
+        .url-row input { flex: 1 1 auto; min-width: 0; }
+        .url-row button { flex: none; white-space: nowrap; }
 
-        .dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(26, 127, 55, .15); }
-
-        .cid { font-family: Consolas, monospace; font-size: 12px; word-break: break-all; }
-
-        #log {
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            background: #fff;
-            padding: 10px 12px;
-            height: 340px;
-            overflow: auto;
-            font-family: Consolas, "SFMono-Regular", monospace;
-            font-size: 12px;
-        }
-
-        .line { border-bottom: 1px dashed #eef0f3; padding: 4px 0; }
-        .muted { color: var(--muted); }
-        .err { color: var(--danger); font-size: 13px; }
-
-        /* 页脚：项目地址，图标随文字颜色走（currentColor），hover 时一起变蓝 */
-        .footer {
-            max-width: 1180px;
-            margin: 4px auto 0;
-            padding: 16px 28px 0;
-            border-top: 1px solid var(--border);
-            display: flex;
-            justify-content: center;
-        }
-
-        .footer a {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            text-decoration: none;
-            color: var(--muted);
-            font-size: 12px;
-            transition: .15s;
-        }
-
-        .footer a:hover { color: var(--brand); }
-        .gh-icon { fill: currentColor; }
+        /* clientId 是 36 位 UUID，跟按钮挤在同一行会把整行顶换行：单独占一行 */
+        .row-full { flex: 1 1 100%; min-width: 0; }
+        #connTip { flex: 1 1 100%; }
     </style>
 </head>
 <body>
 
 <div class="topbar">
-    <div class="brand"><span class="logo">SSE</span> Stream Nexus</div>
+    <div class="brand"><span class="logo">SSE</span> <span class="brand-text">Stream Nexus</span></div>
     <div class="nav">
         <a th:href="@{/admin}" th:classappend="${active == 'admin'} ? 'active' : ''">连接管理</a>
-        <a th:href="@{/console}" th:classappend="${active == 'console'} ? 'active' : ''">推送测试</a>
+        <!-- 推送测试新开标签页：管理页和它经常要对着看（一边看连接台账一边推消息） -->
+        <a th:href="@{/console}" target="_blank" rel="noopener noreferrer"
+           th:classappend="${active == 'console'} ? 'active' : ''">推送测试</a>
     </div>
-    <div class="meta" th:text="'心跳 ' + ${heartbeatInterval} + 's · 失联判定 ' + ${heartbeatTimeout} + 's'"></div>
+    <div class="meta">
+        <span class="live"><i></i>STREAM</span>
+        <span th:text="'心跳 ' + ${heartbeatInterval} + 's · 失联判定 ' + ${heartbeatTimeout} + 's'"></span>
+    </div>
 </div>
 
 <div class="wrap">
-    <div class="card">
+    <div class="card" id="cardSub">
         <h3 class="card-title">订阅</h3>
         <p class="card-sub">一条连接可订阅多个模块，模块名须与推送侧 bizModule 完全一致（含大小写）</p>
         <div class="grid">
-            <div class="field" style="grid-column:1/-1">
+            <div class="field full">
                 <label>连接地址 <span class="hint">可编辑，点「连接」时以输入框内容为准（缺 clientId / modules 会自动补齐）</span></label>
-                <div style="display:flex;gap:8px;align-items:center">
+                <div class="url-row">
                     <input type="text" id="subUrl" spellcheck="false">
                     <button onclick="resetUrl()" title="重新生成 clientId 并回填地址">重生成</button>
                 </div>
@@ -223,7 +70,10 @@
             <button class="primary" onclick="connect()">连接</button>
             <button onclick="disconnect()">断开</button>
             <span><span class="dot" id="dot"></span>状态：<span id="status" class="off">未连接</span></span>
-            <span class="muted">clientId：<span class="cid" id="clientId">-</span></span>
+            <span class="signal" id="signal" title="已建立长连接，等待服务端推送"><i></i><i></i><i></i><i></i></span>
+            <!-- clientId / 提示各自独占一行：连上后 clientId 会变成 36 位 UUID，
+                 挤在按钮后面会把整行顶换行，断开又缩回去，看着像样式在乱跳 -->
+            <span class="row-full muted">clientId：<span class="cid" id="clientId">-</span></span>
             <span id="connTip" class="muted"></span>
         </div>
     </div>
@@ -282,6 +132,7 @@
     </a>
 </footer>
 
+<script th:src="@{/js/nexus-tech.js}"></script>
 <script>
 let es = null;
 let clientId = null;
@@ -445,6 +296,9 @@ function setStatus(text, online) {
     document.getElementById('status').textContent = text;
     document.getElementById('status').className = online ? 'on' : 'off';
     document.getElementById('dot').className = 'dot' + (online ? ' on' : '');
+    // 连接态动效：信号条跳动 + 订阅卡片顶边亮线扫动，断开时全部收起来
+    document.getElementById('signal').className = 'signal' + (online ? ' on' : '');
+    document.getElementById('cardSub').classList.toggle('live', !!online);
 }
 
 function pong() {

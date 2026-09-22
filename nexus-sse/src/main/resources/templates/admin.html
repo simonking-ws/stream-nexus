@@ -4,278 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title th:text="${title}">SSE 连接管理</title>
+    <meta name="color-scheme" content="dark">
+    <link rel="stylesheet" th:href="@{/css/nexus-tech.css}">
     <style>
-        :root {
-            --brand: #2563eb;
-            --brand-soft: #eef4ff;
-            --border: #e6e8eb;
-            --text: #1f2328;
-            --muted: #8b949e;
-            --danger: #d92d20;
-            --ok: #1a7f37;
-        }
-
-        * { box-sizing: border-box; }
-
-        body {
-            margin: 0;
-            padding: 0 0 40px;
-            font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
-            color: var(--text);
-            background: #f4f6fa;
-            font-size: 14px;
-        }
-
-        .topbar {
-            background: #fff;
-            border-bottom: 1px solid var(--border);
-            padding: 14px 28px;
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 16px;
-        }
-
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 16px;
-            font-weight: 700;
-            letter-spacing: .3px;
-        }
-
-        .logo {
-            width: 26px;
-            height: 26px;
-            border-radius: 8px;
-            background: linear-gradient(135deg, #2563eb, #38bdf8);
-            color: #fff;
-            font-size: 13px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .nav { display: flex; gap: 6px; }
-
-        .nav a {
-            text-decoration: none;
-            color: #475467;
-            padding: 6px 14px;
-            border-radius: 999px;
-            font-size: 13px;
-            transition: .15s;
-        }
-
-        .nav a:hover { background: var(--brand-soft); color: var(--brand); }
-
-        .nav a.active {
-            background: var(--brand);
-            color: #fff;
-            box-shadow: 0 2px 6px rgba(37, 99, 235, .28);
-        }
-
-        .meta { color: var(--muted); font-size: 12px; margin-left: auto; }
-
-        .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 28px 0; }
-
-        .tabs {
-            display: inline-flex;
-            gap: 4px;
-            background: #e9edf3;
-            padding: 4px;
-            border-radius: 999px;
-            margin-bottom: 18px;
-        }
-
-        .tabs button {
-            border: 0;
-            background: transparent;
-            padding: 7px 20px;
-            border-radius: 999px;
-            font-size: 13px;
-            color: #475467;
-            cursor: pointer;
-            transition: .15s;
-        }
-
-        .tabs button:hover { color: var(--brand); }
-
-        .tabs button.active {
-            background: #fff;
-            color: var(--brand);
-            font-weight: 600;
-            box-shadow: 0 1px 4px rgba(16, 24, 40, .12);
-        }
-
-        .card {
-            background: #fff;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 18px 20px;
-            margin-bottom: 16px;
-            box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
-        }
-
-        .card-title { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
-        .card-sub { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 14px;
-        }
-
-        .stat {
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 12px 14px;
-            background: linear-gradient(180deg, #fbfcfe, #fff);
-        }
-
-        .stat .label { color: var(--muted); font-size: 12px; }
-        .stat .num { font-size: 24px; font-weight: 700; margin-top: 4px; }
-        .stat .num.warn { color: var(--danger); }
-
-        .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-
-        .chip {
-            background: var(--brand-soft);
-            border: 1px solid #d3e1ff;
-            color: var(--brand);
-            border-radius: 999px;
-            padding: 2px 10px;
-            font-size: 12px;
-            white-space: nowrap;
-        }
-
-        .chip.global { background: #fff6e6; border-color: #ffe0ad; color: #96540a; }
-        .chip.ghost { background: #f2f4f7; border-color: #e4e7ec; color: #475467; }
-
-        .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-
-        input[type=text], select {
-            padding: 7px 10px;
-            border: 1px solid #d0d5dd;
-            border-radius: 8px;
-            font-size: 13px;
-            background: #fff;
-            outline: none;
-            transition: .15s;
-        }
-
-        input[type=text]:focus, select:focus {
-            border-color: var(--brand);
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
-        }
-
-        input[type=text]::placeholder { color: #98a2b3; }
-
-        button {
-            padding: 7px 14px;
-            border-radius: 8px;
-            border: 1px solid #d0d5dd;
-            background: #fff;
-            color: #344054;
-            font-size: 13px;
-            cursor: pointer;
-            transition: .15s;
-        }
-
-        button:hover { background: #f4f6fa; }
-        button:disabled { opacity: .55; cursor: not-allowed; }
-
-        button.primary {
-            background: var(--brand);
-            border-color: var(--brand);
-            color: #fff;
-            font-weight: 600;
-        }
-
-        button.primary:hover { background: #1d4ed8; }
-
-        button.danger { color: var(--danger); border-color: #f5c6c2; }
-        button.danger:hover { background: #fef3f2; }
-
-        button.link {
-            border: 0;
-            background: transparent;
-            color: var(--brand);
-            padding: 2px 4px;
-            font-size: 12px;
-        }
-
-        button.link:hover { background: transparent; text-decoration: underline; }
-
-        .table-wrap { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #fff; }
-
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-
-        th, td { padding: 11px 14px; border-bottom: 1px solid #f0f2f5; text-align: left; vertical-align: middle; }
-        th { background: #fafbfc; font-weight: 600; color: #475467; white-space: nowrap; font-size: 12px; }
-        tbody tr:last-child td { border-bottom: 0; }
-        tbody tr:hover { background: #fbfcfe; }
-
-        .cid { font-family: Consolas, "SFMono-Regular", monospace; font-size: 12px; word-break: break-all; }
-        .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
-
-        .badge { border-radius: 999px; padding: 2px 10px; font-size: 12px; white-space: nowrap; }
-        .badge.ok { background: #e7f6ec; color: var(--ok); }
-        .badge.stale { background: #fee4e2; color: var(--danger); }
-        .badge.default { background: var(--brand-soft); color: var(--brand); }
-
-        .empty { padding: 34px; text-align: center; color: var(--muted); }
-
-        .err { color: var(--danger); font-size: 13px; }
-        .ok-text { color: var(--ok); font-size: 13px; }
-
-        .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
-
-        .field { display: flex; flex-direction: column; gap: 6px; }
-        .field label { font-size: 12px; color: #475467; font-weight: 600; }
-        .field .hint { font-size: 11px; color: var(--muted); font-weight: 400; }
-        .field-row { display: flex; gap: 8px; align-items: center; }
-        .field-row input { flex: 1; min-width: 0; }
-
-        .key-cell { display: flex; align-items: center; gap: 8px; }
-        .key-cell .cid { flex: 1; min-width: 0; }
-
-        /* 页脚：项目地址，图标随文字颜色走（currentColor），hover 时一起变蓝 */
-        .footer {
-            max-width: 1180px;
-            margin: 4px auto 0;
-            padding: 16px 28px 0;
-            border-top: 1px solid var(--border);
-            display: flex;
-            justify-content: center;
-        }
-
-        .footer a {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            text-decoration: none;
-            color: var(--muted);
-            font-size: 12px;
-            transition: .15s;
-        }
-
-        .footer a:hover { color: var(--brand); }
-        .gh-icon { fill: currentColor; }
+        /* 管理页私有补充：公共科技感主题（深色 / 霓虹 / 动效）见 /css/nexus-tech.css */
+        .toolbar label { font-size: 12px; }
+        .toolbar select, .toolbar input[type=text] { width: auto; }
+        .stat .num.sm { font-size: 18px; }
     </style>
 </head>
 <body>
 
 <div class="topbar">
-    <div class="brand"><span class="logo">SSE</span> Stream Nexus</div>
+    <div class="brand"><span class="logo">SSE</span> <span class="brand-text">Stream Nexus</span></div>
     <div class="nav">
         <a th:href="@{/admin}" th:classappend="${active == 'admin'} ? 'active' : ''">连接管理</a>
-        <a th:href="@{/console}" th:classappend="${active == 'console'} ? 'active' : ''">推送测试</a>
+        <!-- 推送测试新开标签页：管理页和它经常要对着看（一边看连接台账一边推消息） -->
+        <a th:href="@{/console}" target="_blank" rel="noopener noreferrer"
+           th:classappend="${active == 'console'} ? 'active' : ''">推送测试</a>
     </div>
-    <div class="meta"
-         th:text="'心跳 ' + ${heartbeatInterval} + 's · 失联判定 ' + ${heartbeatTimeout} + 's · 连接上限 ' + ${maxConnections}"></div>
+    <div class="meta">
+        <span class="live"><i></i>LIVE</span>
+        <span th:text="'心跳 ' + ${heartbeatInterval} + 's · 失联判定 ' + ${heartbeatTimeout} + 's · 连接上限 ' + ${maxConnections}"></span>
+    </div>
 </div>
 
 <div class="wrap">
@@ -301,6 +52,12 @@
                     <div class="num" id="hbTimeout">-</div>
                 </div>
                 <div class="stat">
+                    <div class="label">项目运行</div>
+                    <div class="num sm" id="uptime">-</div>
+                    <!-- 启动时刻：光看「跑了多久」判断不出是哪次发布起的 -->
+                    <div class="sub" id="startAt">-</div>
+                </div>
+                <div class="stat">
                     <div class="label">上次刷新</div>
                     <div class="num" id="refreshAt" style="font-size:18px">-</div>
                 </div>
@@ -310,7 +67,7 @@
 
         <div class="card toolbar">
             <button onclick="load()">刷新</button>
-            <label style="font-size:12px;color:#475467">自动刷新
+            <label style="font-size:12px">自动刷新
                 <select id="interval" onchange="applyInterval()">
                     <option value="0">关闭</option>
                     <option value="3000">3 秒</option>
@@ -318,7 +75,7 @@
                     <option value="10000">10 秒</option>
                 </select>
             </label>
-            <label style="font-size:12px;color:#475467">排序
+            <label style="font-size:12px">排序
                 <select id="sort" onchange="render()">
                     <option value="createTime">建连时间（新→旧）</option>
                     <option value="silence">静默时长（长→短）</option>
@@ -326,7 +83,7 @@
                 </select>
             </label>
             <input type="text" id="keyword" placeholder="过滤 clientId / IP / 业务模块" oninput="render()" style="width:240px">
-            <label style="font-size:12px;color:#475467;display:flex;align-items:center;gap:6px">
+            <label style="font-size:12px;display:flex;align-items:center;gap:6px">
                 <input type="checkbox" id="staleOnly" onchange="render()"> 只看疑似失联
             </label>
             <span class="muted" id="tip" style="color:var(--muted);font-size:12px"></span>
@@ -410,6 +167,7 @@
     </a>
 </footer>
 
+<script th:src="@{/js/nexus-tech.js}"></script>
 <script>
 let items = [];
 let meta = {};
@@ -418,6 +176,13 @@ let apps = [];
 let defaultAppId = '';
 // 正在行内编辑的 appId，空串表示没有
 let editingAppId = '';
+// 上一次渲染见过的 clientId：用来判断哪些行是新来的（新行才做入场动画）
+let knownIds = null;
+let prevTotal = null;
+// 服务端时间 - 浏览器时间：把浏览器时钟对齐服务端，读秒才不会被本机时钟带偏
+let serverSkew = 0;
+// 运行时间读秒定时器（独立于台账自动刷新）
+let uptimeTimer = null;
 
 function switchTab(name) {
     const isConn = name === 'conn';
@@ -435,6 +200,8 @@ async function load() {
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         meta = await resp.json();
         items = meta.items || [];
+        // 每次拉到服务端时间就校准一次偏差（本机时钟可能被手动改过 / 有漂移）
+        if (meta.serverTime) serverSkew = meta.serverTime - Date.now();
         document.getElementById('refreshAt').textContent = new Date().toLocaleTimeString();
         setTip('tip', '');
         render();
@@ -454,10 +221,48 @@ function fmt(ts) {
 }
 
 function duration(ms) {
-    const s = Math.floor(ms / 1000);
+    // 时钟回拨等极端情况会算出负数，统一归零
+    const s = Math.max(Math.floor(ms / 1000), 0);
     if (s < 60) return s + ' 秒';
     if (s < 3600) return Math.floor(s / 60) + ' 分 ' + (s % 60) + ' 秒';
-    return Math.floor(s / 3600) + ' 时 ' + Math.floor(s % 3600 / 60) + ' 分';
+    const h = Math.floor(s / 3600);
+    // 超过一天换成「天 + 小时」：项目运行时间跑久了会是 25 时 0 分 这种读不懂的数
+    if (h < 24) return h + ' 时 ' + Math.floor(s % 3600 / 60) + ' 分';
+    return Math.floor(h / 24) + ' 天 ' + (h % 24) + ' 小时';
+}
+
+/** 运行时间专用格式化：始终精确到秒，配合 1 秒定时器做读秒 */
+function durationSec(ms) {
+    const s = Math.max(Math.floor(ms / 1000), 0);
+    const d = Math.floor(s / 86400);
+    const h = Math.floor(s % 86400 / 3600);
+    const m = Math.floor(s % 3600 / 60);
+    const sec = s % 60;
+    // 数字等宽（.num 已开 tabular-nums），跳秒时不会左右抖
+    const clock = [h, m, sec].map(v => String(v).padStart(2, '0')).join(':');
+    return d > 0 ? d + ' 天 ' + clock : clock;
+}
+
+/** 本机访问：服务端已把 ::1 归一化成 127.0.0.1，这里兼容一下旧连接的原始值 */
+function isLocalIp(ip) {
+    const v = String(ip || '').trim().toLowerCase();
+    return v === '127.0.0.1' || v === '::1' || v === '0:0:0:0:0:0:0:1' || v === 'localhost';
+}
+
+/**
+ * 运行时间读秒：自己 1 秒一跳，不跟着台账刷新走（自动刷新最慢 10 秒，那就成跳 10 秒了）。
+ *
+ * <p>不用服务端下发的 uptime（那是某一瞬间的值），改成「服务端启动时刻 + 时钟偏差」现算：
+ * 偏差在每次 load() 时校准，浏览器本地时钟不准也不影响。
+ */
+function paintUptime() {
+    if (!meta.startTime) return;
+    document.getElementById('uptime').textContent = durationSec(Date.now() + serverSkew - meta.startTime);
+}
+
+function startUptimeClock() {
+    clearInterval(uptimeTimer);
+    uptimeTimer = setInterval(paintUptime, 1000);
 }
 
 function matches(it) {
@@ -483,14 +288,32 @@ function chip(text, extra) {
     return span;
 }
 
+/** 数字滚动落到目标值（nexus-tech.js 提供；脚本没加载成功就直接赋值，不影响功能） */
+function setNum(id, value) {
+    const el = document.getElementById(id);
+    if (window.NexusFX) NexusFX.countTo(el, value);
+    else el.textContent = value;
+}
+
 function render() {
     const list = sorted(items.filter(matches).filter(it => !document.getElementById('staleOnly').checked || it.stale));
     const stale = items.filter(it => it.stale).length;
+    const total = meta.total ?? 0;
 
-    document.getElementById('total').textContent = meta.total ?? 0;
-    document.getElementById('staleCount').textContent = stale;
+    // 在线数变化时闪一下：定时刷新下不做提示，数字跳了也看不出是变了还是页面卡住
+    if (prevTotal !== null && prevTotal !== total) {
+        if (window.NexusFX) NexusFX.flash(document.getElementById('total'));
+    }
+    prevTotal = total;
+
+    setNum('total', total);
+    setNum('staleCount', stale);
     document.getElementById('staleCount').className = 'num' + (stale > 0 ? ' warn' : '');
     document.getElementById('hbTimeout').textContent = meta.heartbeatTimeout ? duration(meta.heartbeatTimeout) : '-';
+
+    // 项目运行时间：交给 1 秒定时器自己走，这里只刷一次启动时刻（下面 startAt 不随时间变）
+    paintUptime();
+    document.getElementById('startAt').textContent = meta.startTime ? '启动于 ' + fmt(meta.startTime) : '-';
 
     const chips = document.getElementById('moduleChips');
     chips.innerHTML = '';
@@ -504,8 +327,16 @@ function render() {
 
     const tbody = document.getElementById('tbody');
     tbody.innerHTML = '';
-    list.forEach(it => {
+    // 首屏整体错峰淡入；之后只有「新出现的连接」才播动画，避免每 5 秒整张表闪一次
+    const firstPaint = knownIds === null;
+    list.forEach((it, idx) => {
         const tr = document.createElement('tr');
+        if (firstPaint) {
+            tr.className = 'row-new';
+            tr.style.animationDelay = Math.min(idx * 35, 700) + 'ms';
+        } else if (!knownIds.has(it.clientId)) {
+            tr.className = 'row-new';
+        }
 
         const cid = document.createElement('td');
         cid.className = 'cid';
@@ -515,6 +346,13 @@ function render() {
         const ipt = document.createElement('td');
         ipt.className = 'cid';
         ipt.textContent = it.ip || '-';
+        // 本机（localhost）访问标一下：一眼分清是自己在浏览器里调试，还是外部客户端连进来的
+        if (isLocalIp(it.ip)) {
+            const local = document.createElement('div');
+            local.className = 'sub';
+            local.textContent = '本机';
+            ipt.appendChild(local);
+        }
         tr.appendChild(ipt);
 
         const mod = document.createElement('td');
@@ -558,6 +396,8 @@ function render() {
 
         tbody.appendChild(tr);
     });
+    // 记住这一轮的全部 clientId（用全量而非过滤后的列表：切筛选条件不该被当成新连接）
+    knownIds = new Set(items.map(it => it.clientId));
 
     document.getElementById('empty').hidden = list.length > 0;
 }
@@ -808,6 +648,7 @@ async function kick(clientId, btn) {
 load();
 loadApps();
 applyInterval();
+startUptimeClock();
 </script>
 </body>
 </html>
