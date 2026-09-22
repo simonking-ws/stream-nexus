@@ -46,14 +46,16 @@ public class SseController {
     /**
      * 建立 SSE 长连接（永不过期）
      *
-     * @param clientId 客户端ID，由客户端生成（如 crypto.randomUUID()），需保证唯一
-     * @param modules  订阅的业务模块，逗号分隔，如 {@code lot,order}。
-     *                 按模块推送的路由依据，取值必须与推送侧完全一致（含大小写）。
-     *                 缺省或为空白时默认订阅 {@link SseConstants#GLOBAL_MODULE}（{@code *}，接收全部按模块推送的消息）
+     * <p>客户端ID 由<b>服务端</b>生成（{@link SseConstants#newClientId()}），客户端只带订阅模块即可：
+     * 自带ID 意味着客户端可以声明任意身份，服务端要么承担被冒用的风险，要么再叠一层令牌校验。
+     * 生成的 ID 随建连回执下发，客户端保存后用于心跳应答与定向推送寻址。
+     *
+     * @param modules 订阅的业务模块，逗号分隔，如 {@code lot,order}。
+     *                按模块推送的路由依据，取值必须与推送侧完全一致（含大小写）。
+     *                缺省或为空白时默认订阅 {@link SseConstants#GLOBAL_MODULE}（{@code *}，接收全部按模块推送的消息）
      */
     @GetMapping(path = "/sse/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe(@RequestParam String clientId,
-                                @RequestParam(defaultValue = SseConstants.GLOBAL_MODULE) String modules,
+    public SseEmitter subscribe(@RequestParam(defaultValue = SseConstants.GLOBAL_MODULE) String modules,
                                 HttpServletRequest request) {
         if (properties.getMaxConnections() > 0 && registry.size() >= properties.getMaxConnections()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "connection limit reached");
@@ -70,10 +72,14 @@ public class SseController {
             moduleSet.add(SseConstants.GLOBAL_MODULE);
         }
 
+        // 客户端ID 服务端生成：客户端不传、也无从伪造
+        String clientId = SseConstants.newClientId();
+
         // 0 = 永不过期，回收完全交给 HeartbeatTask
         SseEmitter emitter = new SseEmitter(0L);
         SseClient client = new SseClient(clientId, emitter, moduleSet, resolveClientIp(request));
 
+        // UUID 碰撞概率可忽略，正常路径走不到；保留兜底，避免真的撞了以后两条连接互相覆盖
         if (!registry.add(client)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "clientId already connected: " + clientId);
         }
@@ -104,10 +110,11 @@ public class SseController {
      * <p>永不过期策略下这是判断连接存活的**唯一依据**——半开连接下服务端 {@code send()} 依然返回成功，
      * 必须由客户端应答才能发现死连接。无需节流，收到即回。
      *
-     * <p>只依赖 {@code clientId}；{@code body} 可选（预留给 RTT / 序号等诊断信息），当前不参与判定。
+     * <p>只依赖 {@code clientId}（建连回执里服务端下发的那个，重连会变）；
+     * {@code body} 可选（预留给 RTT / 序号等诊断信息），当前不参与判定。
      */
     @PostMapping("/sse/pong")
-    public Map<String, Object> pong(@RequestParam String clientId,
+    public Map<String, Object> pong(@RequestParam(SseConstants.PARAM_CLIENT_ID) String clientId,
                                     @RequestBody(required = false) SseMessage<Object> message) {
         SseClient client = registry.get(clientId);
         boolean ok = false;
@@ -178,9 +185,13 @@ public class SseController {
         return v;
     }
 
+    /**
+     * 建连回执：{@code clientId} 是客户端心跳应答与业务系统定向推送的唯一依据，
+     * 必须取服务端生成的那个值（重连即换，故客户端每次建连后都要覆盖保存）
+     */
     private Map<String, Object> buildWelcome(String clientId, Set<String> modules) {
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("clientId", clientId);
+        data.put(SseConstants.PARAM_CLIENT_ID, clientId);
         data.put("modules", modules);
         data.put("heartbeatInterval", properties.getHeartbeatInterval().toMillis());
         return data;

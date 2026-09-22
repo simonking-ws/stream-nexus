@@ -22,7 +22,7 @@
         .url-row input { flex: 1 1 auto; min-width: 0; }
         .url-row button { flex: none; white-space: nowrap; }
 
-        /* clientId 是 36 位 UUID，跟按钮挤在同一行会把整行顶换行：单独占一行 */
+        /* clientId 是服务端分配的 36 位 UUID，跟按钮挤在同一行会把整行顶换行：单独占一行 */
         .row-full { flex: 1 1 100%; min-width: 0; }
         #connTip { flex: 1 1 100%; }
     </style>
@@ -49,10 +49,10 @@
         <p class="card-sub">一条连接可订阅多个模块，模块名须与推送侧 bizModule 完全一致（含大小写）</p>
         <div class="grid">
             <div class="field full">
-                <label>连接地址 <span class="hint">可编辑，点「连接」时以输入框内容为准（缺 clientId / modules 会自动补齐）</span></label>
+                <label>连接地址 <span class="hint">可编辑，点「连接」时以输入框内容为准（缺 modules 会自动补齐；clientId 由服务端分配，不在地址里）</span></label>
                 <div class="url-row">
                     <input type="text" id="subUrl" spellcheck="false">
-                    <button onclick="resetUrl()" title="重新生成 clientId 并回填地址">重生成</button>
+                    <button onclick="resetUrl()" title="恢复默认连接地址">重置</button>
                 </div>
             </div>
             <div class="field">
@@ -73,7 +73,7 @@
             <span class="signal" id="signal" title="已建立长连接，等待服务端推送"><i></i><i></i><i></i><i></i></span>
             <!-- clientId / 提示各自独占一行：连上后 clientId 会变成 36 位 UUID，
                  挤在按钮后面会把整行顶换行，断开又缩回去，看着像样式在乱跳 -->
-            <span class="row-full muted">clientId：<span class="cid" id="clientId">-</span></span>
+            <span class="row-full muted">clientId（服务端分配）：<span class="cid" id="clientId">-</span></span>
             <span id="connTip" class="muted"></span>
         </div>
     </div>
@@ -99,7 +99,7 @@
                 <input type="text" id="action" value="test_msg">
             </div>
             <div class="field">
-                <label>定向 clientId <span class="hint">留空=按模块广播</span></label>
+                <label>定向 clientId <span class="hint">服务端建连回执下发；留空=按模块广播</span></label>
                 <input type="text" id="targetClientId" placeholder="留空=按模块广播">
             </div>
         </div>
@@ -135,7 +135,7 @@
 <script th:src="@{/js/nexus-tech.js}"></script>
 <script>
 let es = null;
-let clientId = null;
+let clientId = null;      // 服务端建连回执分配的客户端ID，重连即换（断开后失效）
 let lastTs = {};      // 按 bizModule:action 记录已处理的最大 ts，用于丢弃乱序消息
 let appList = [];     // 推送应用（appId / apiKey），来自 /sse/admin/apps
 
@@ -182,13 +182,14 @@ function currentUrl() {
 }
 
 /**
- * 生成新 clientId 并回填地址：页面加载、断开、点「重生成」都会走这里
+ * 回填默认连接地址：页面加载、点「重置」都会走这里。
+ *
+ * 地址里只有 modules / token —— clientId 由服务端建连时分配，不在地址里，
+ * 因此浏览器自动重连（原样复用 URL）不会误带旧 ID，也不用再自己生成 UUID。
  */
 function resetUrl() {
-    clientId = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
-    document.getElementById('clientId').textContent = clientId;
     const u = currentUrl();
-    u.searchParams.set('clientId', clientId);
+    u.searchParams.delete('clientId');   // 历史地址里可能残留，清掉避免误导
     if (!u.searchParams.get('modules')) {
         u.searchParams.set('modules', document.getElementById('modules').value);
     }
@@ -236,13 +237,10 @@ function connect() {
         return;
     }
     connTip('');
-    // 地址里没有 clientId（被手改删掉）时补一个，否则沿用地址里的那个
-    if (!currentUrl().searchParams.get('clientId')) {
-        resetUrl();
-    } else {
-        clientId = currentUrl().searchParams.get('clientId');
-        document.getElementById('clientId').textContent = clientId;
-    }
+    // 建连前先清掉上一次的 clientId：重连会拿到新的，留着旧的会让心跳应答打到已失效的连接上
+    clientId = null;
+    document.getElementById('clientId').textContent = '-';
+    resetUrl();   // 顺带清掉历史地址里残留的 clientId 参数
     setStatus('已连接', true);
 
     es = new EventSource(currentUrl().toString());
@@ -277,6 +275,11 @@ function connect() {
     es.addEventListener(EVT_MESSAGE, e => {
         const m = JSON.parse(e.data);
         if (m.bizModule === SYS_MODULE) {
+            // 建连回执里的 clientId：服务端分配，是心跳应答与定向推送的唯一依据
+            if (m.action === 'connected' && m.data && m.data.clientId) {
+                clientId = m.data.clientId;
+                document.getElementById('clientId').textContent = clientId;
+            }
             log('收到建连消息：' + JSON.stringify(m.data), true);
             return;
         }
@@ -302,6 +305,8 @@ function setStatus(text, online) {
 }
 
 function pong() {
+    // 建连回执还没到（clientId 为空）时不发：带了空 ID 的应答服务端认不出连接，等于白发
+    if (!clientId) return;
     fetch(`/sse/pong?clientId=${encodeURIComponent(clientId)}`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -314,7 +319,9 @@ function disconnect() {
     es.close();
     es = null;
     setStatus('已断开', false);
-    resetUrl();   // 换一个 clientId，下次连接是全新身份
+    // 断开即失效：下次建连服务端会重新分配一个 clientId
+    clientId = null;
+    document.getElementById('clientId').textContent = '-';
 }
 
 function tip(text, isErr) {
@@ -402,7 +409,7 @@ function push() {
     }).then(r => r.json()).then(r => log('推送结果：' + JSON.stringify(r), true));
 }
 
-// 初始地址：当前站点 + /sse/subscribe，并带上一个现成的 clientId
+// 初始地址：当前站点 + /sse/subscribe（clientId 由服务端建连时分配，不进地址）
 document.getElementById('subUrl').value =
     location.origin + '/sse/subscribe?modules=' + encodeURIComponent(document.getElementById('modules').value);
 resetUrl();

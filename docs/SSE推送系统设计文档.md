@@ -89,11 +89,19 @@
 
 | 方式 | 订阅侧 | 推送侧 | 命中 |
 | --- | --- | --- | --- |
-| 按模块广播 | `/sse/subscribe?clientId=C1&modules=lot,order` | `{"bizModule":"lot", ...}` | 所有订阅了 `lot` 的连接 |
-| 按客户端定向 | —（只要在线即可） | `{"clientIds":["C1"], ...}` | 指定 clientId 的连接 |
+| 按模块广播 | `/sse/subscribe?modules=lot,order` | `{"bizModule":"lot", ...}` | 所有订阅了 `lot` 的连接 |
+| 按客户端定向 | —（只要在线即可，`clientId` 由服务端分配） | `{"clientIds":["C1"], ...}` | 指定 clientId 的连接 |
 | 两者同时 | — | 两个字段都填 | **并集**，按 clientId 去重 |
-| 全局订阅 | `/sse/subscribe?clientId=C1`（`modules` 留空，默认 `*`） | 任意 `bizModule` 推送 | 每次按模块推送都会收到 |
+| 全局订阅 | `/sse/subscribe`（`modules` 留空，默认 `*`） | 任意 `bizModule` 推送 | 每次按模块推送都会收到 |
 | 全局广播 | — | `{"bizModule":"*", ...}` | 全部在线连接 |
+
+**`clientId` 由服务端分配**（UUID，见 `SseConstants.newClientId()`），客户端建连时不传、也无从伪造，
+只随建连回执（`sse/connected` 的 `data.clientId`）下发给客户端：
+
+- 不让客户端自带 ID 是有意的：自带意味着客户端可以声明任意身份，服务端要么承担被冒用的风险，要么再叠一层令牌校验；
+- 代价是它**随连接生命周期变化**（重连即换）：要按用户维度稳定寻址，优先用模块订阅，
+  或在业务系统侧维护「用户 → 当前 clientId」映射（客户端每次建连后上报刷新）；
+- 与 `nexus-websocket` 的 `WsConstants.newClientId()` 同口径，两个服务的客户端接入方式一致。
 
 `PushRequest` 结构（`groups` 已删除）：
 
@@ -136,15 +144,16 @@ long next = Math.max(System.currentTimeMillis(), prev + 1);  // CAS
 
 ```49:87:nexus-sse/src/main/java/com/simonking/stream/nexus/sse/controller/SseController.java
     @GetMapping(path = "/sse/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe(@RequestParam String clientId,
-                                @RequestParam(defaultValue = "") String modules) {
+    public SseEmitter subscribe(@RequestParam(defaultValue = SseConstants.GLOBAL_MODULE) String modules,
+                                HttpServletRequest request) {
         if (properties.getMaxConnections() > 0 && registry.size() >= properties.getMaxConnections()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "connection limit reached");
         }
         ...
+        String clientId = SseConstants.newClientId();   // 服务端分配，客户端不传
         SseEmitter emitter = new SseEmitter(0L);
-        SseClient client = new SseClient(clientId, emitter, moduleSet);
-        if (!registry.add(client)) {
+        SseClient client = new SseClient(clientId, emitter, moduleSet, resolveClientIp(request));
+        if (!registry.add(client)) {                    // UUID 撞号的理论兜底
             throw new ResponseStatusException(HttpStatus.CONFLICT, "clientId already connected: " + clientId);
         }
         emitter.onCompletion(() -> registry.remove(clientId));
@@ -152,7 +161,13 @@ long next = Math.max(System.currentTimeMillis(), prev + 1);  // CAS
         ...
 ```
 
-关键点：`clientId` 由**客户端生成**（`crypto.randomUUID()`），因为 `EventSource` 是 GET 且不能带自定义头，重连时浏览器会原样复用 URL——**clientId 必须写进 query 且全程不变**，否则重连后订阅的业务模块丢失。
+关键点：
+
+- `clientId` 由**服务端生成**，随建连回执下发；客户端只带订阅模块，不再在 URL 里声明身份；
+- `modules` 仍写进 query——`EventSource` 是 GET 且不能带自定义头，重连时浏览器原样复用 URL，
+  订阅模块只能靠它保住；`clientId` 不进 URL，重连即换新 ID，也就没有「旧 ID 冲突」的窗口（见 E6）；
+- 心跳应答 `/sse/pong?clientId=` 仍要带 ID：HTTP 应答与 SSE 长连接是两条独立连接，
+  服务端只能靠这个 ID 定位该给哪条连接续命。
 
 ### 4.2 心跳与回收（永不过期下的核心）
 
@@ -255,13 +270,14 @@ nexus.sse.connect-auth-token=xxx        # 建连令牌，开启后必填；留�
 
 ## 6. 客户端接入规范
 
-1. `clientId = crypto.randomUUID()`，**整个页面生命周期内不变**（含自动重连）；
-2. `es.onopen`：**必须重新拉取全量业务状态**（服务端无快照、无补发）；
-3. 单 `MESSAGE` 监听器，按 `bizModule:action` 路由；`bizModule === 'sse'` 一律忽略（心跳/建连消息）；
-4. 监听 `PING` 事件，收到后**立即** `POST /sse/pong?clientId=xxx`；**不要自己起定时器上报**——心跳节奏由服务端驱动，漏答会在 `heartbeat-timeout`（默认 90s）后被回收；
-5. `ts <= lastTs[key]` 的消息丢弃（防乱序）；
-6. `es.onerror` 什么都不用做，浏览器自动重连；
-7. 订阅的 `modules` 与业务系统推送的 `bizModule` 必须完全一致（含大小写），否则**静默推空**；定向推送所需的 `clientId` 由页面建连后上报给业务系统，由业务系统自行维护 `clientId ↔ userId` 映射。
+1. 建连只带 `modules`：`/sse/subscribe?modules=lot,order`——`clientId` 由服务端分配，不需要客户端生成；
+2. 从建连回执（`bizModule === 'sse' && action === 'connected'`）里取 `data.clientId` 并保存，**重连即换**，每次建连都要覆盖；
+3. `es.onopen`：**必须重新拉取全量业务状态**（服务端无快照、无补发）；
+4. 单 `MESSAGE` 监听器，按 `bizModule:action` 路由；`bizModule === 'sse'` 一律忽略（心跳/建连消息）；
+5. 监听 `PING` 事件，收到后**立即** `POST /sse/pong?clientId=xxx`（用回执里那个 ID）；**不要自己起定时器上报**——心跳节奏由服务端驱动，漏答会在 `heartbeat-timeout`（默认 90s）后被回收；
+6. `ts <= lastTs[key]` 的消息丢弃（防乱序）；
+7. `es.onerror` 什么都不用做，浏览器自动重连；
+8. 订阅的 `modules` 与业务系统推送的 `bizModule` 必须完全一致（含大小写），否则**静默推空**；定向推送所需的 `clientId` 由页面建连后上报给业务系统，由业务系统自行维护 `clientId ↔ userId` 映射（因重连会换 ID，每次建连后都要刷新该映射）。
 
 ---
 
@@ -363,6 +379,7 @@ SSE 自带 `Last-Event-ID` 补发能力，但补发需要服务端缓存消息�
 
 - 订阅任意 `modules=order,user` → **收到该模块的全部消息**，其中包含他人订单、账户等私密数据；
 - 伪造 `clientId` 调 `/sse/pong` → 给不存在的连接保活（无害），或撞库保活（绕过回收）。
+  ID 改为服务端分配的 UUID 后，枚举撞号已不现实，但**拿到真实 ID 的人仍可替该连接保活**（ID 随建连回执明文下发）。
 
 修复：敏感模块（如 `user` / `order`）的订阅必须带**订阅票据**（JWT，`jti` = clientId，claim 里声明允许订阅的模块），服务端校验票据与 `modules` 的交集，敏感模块无票据一律拒绝。PONG 也需轻量校验（至少校验 clientId 存在且格式合法）。
 
@@ -379,13 +396,13 @@ SSE 自带 `Last-Event-ID` 补发能力，但补发需要服务端缓存消息�
 
 升级路径（接口位置不变）：以 apiKey 为密钥做 HMAC-SHA256 签名 `appId + timestamp + nonce + sha256(body)`（密钥本身不出报文，appId 明文随 `X-Sse-AppId` 传递用于定位应用），服务端校验 5 分钟时间窗 + nonce 去重（`PushAuthInterceptor` 注释里已预留）。
 
-### E6：重连 409 窗口
+### E6：重连 409 窗口（已随「服务端分配 ID」消解）
 
-浏览器自动重连时 clientId 不变。如果旧连接还没被回收（典型场景：半开连接，`onCompletion` 未触发），`registry.add()` 返回 false → **409** → 客户端重连失败 → 3s 后重试，可能持续到旧连接心跳超时（最长 90s）才恢复。
+原问题：clientId 由客户端生成并写进 URL，浏览器自动重连时复用了同一个 ID；旧连接若还没被回收（半开连接，`onCompletion` 未触发），`registry.add()` 返回 false → **409** → 重连失败 → 3s 后重试，可能持续到旧连接心跳超时（最长 90s）。
 
-缓解：clientId 冲突时改为**抢占**（踢掉旧连接再注册新连接）而非返回 409；风险是旧连接若是有效的会被误踢，需结合「旧连接 `lastPongTime` 是否已超时」判断。
+现状：clientId 改为服务端每次建连生成 UUID 后，**重连必然拿到新 ID，不会与旧连接撞号**，该窗口随之消失；`registry.add()` 的冲突分支退化为 UUID 撞号的理论兜底。
 
-> 注：心跳模式下可进一步缩短判定——新连接注册时若发现同 clientId 旧连接，可立即下发一次 PING，超时未 PONG 即抢占。
+代价（需业务侧知悉）：ID 不再稳定，业务系统侧「用户 → clientId」的映射必须在每次建连后刷新，否则定向推送会打到已失效的连接上（`total` 里命中不到，静默丢消息）。要稳定寻址请用模块订阅。
 
 ### E7：`max-lifetime` 重连风暴
 

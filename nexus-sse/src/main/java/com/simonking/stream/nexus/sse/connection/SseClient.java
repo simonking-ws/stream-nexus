@@ -23,7 +23,10 @@ import java.util.concurrent.CopyOnWriteArraySet;
 public class SseClient {
 
     /**
-     * 客户端ID（由客户端生成，订阅时传入）
+     * 客户端ID（服务端建连时生成，见
+     * {@link com.simonking.stream.nexus.common.constant.SseConstants#newClientId()}）
+     *
+     * <p>随连接生命周期变化：重连即换。定向推送的寻址依据，业务系统需自行维护它与用户的映射。
      */
     private String clientId;
 

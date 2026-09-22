@@ -1,5 +1,7 @@
 package com.simonking.stream.nexus.common.constant;
 
+import java.util.UUID;
+
 /**
  * SSE 协议层常量
  *
@@ -14,6 +16,14 @@ public final class SseConstants {
 
     private SseConstants() {
     }
+
+    /**
+     * 客户端ID 参数名 / 字段标识（{@code clientId}）
+     *
+     * <p>只出现在两处：心跳应答的查询参数、建连回执与运维台账里的字段名。
+     * 参数名硬编码在多处，改名时编译器不会报错，故收拢在此。
+     */
+    public static final String PARAM_CLIENT_ID = "clientId";
 
     /**
      * 系统内部消息使用的业务模块名。
@@ -41,6 +51,25 @@ public final class SseConstants {
      * 这里出现在「模块名」位置，那里出现在「模块白名单」位置（表示不限模块）。
      */
     public static final String GLOBAL_MODULE = "*";
+
+    /**
+     * 生成一个客户端ID：UUID v4（36 字符，形如 {@code 6f1d2a3c-...}）
+     *
+     * <p>由<b>服务端</b>在建连时生成，客户端不需要（也不允许）自带：
+     * 让客户端自带ID 意味着客户端可以声明任意身份，服务端要么承担被冒用的风险，
+     * 要么再叠一层令牌校验；交给服务端生成则没有这些问题。
+     *
+     * <p>UUID 足够长（122 位随机），海量终端并发建连的碰撞概率也可以忽略，
+     * 因此 {@code SseClientRegistry#add} 的「ID 冲突」分支只是理论兜底，正常路径不会走到。
+     *
+     * <p>代价是它<b>随连接生命周期变化</b>（重连即换）：要按用户维度稳定寻址，请用模块订阅
+     * 或在业务系统侧维护「用户 → 当前 clientId」的映射（客户端建连后上报）。
+     *
+     * <p>与 nexus-websocket 的 {@code WsConstants#newClientId()} 同口径。
+     */
+    public static String newClientId() {
+        return UUID.randomUUID().toString();
+    }
 
     /**
      * 判断模块名是否为全局模块（忽略大小写，便于订阅侧归一化后与倒排索引对齐）

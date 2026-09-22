@@ -155,8 +155,8 @@ registry.addMapping("/**")
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/sse/subscribe?clientId=&modules=` | 无 | 建立 SSE 长连接，`modules` 逗号分隔 |
-| POST | `/sse/pong?clientId=` | 无 | 心跳应答，收到 `PING` 后立即调用 |
+| GET | `/sse/subscribe?modules=` | 无 | 建立 SSE 长连接，`modules` 逗号分隔；`clientId` 由服务端分配并随建连回执下发 |
+| POST | `/sse/pong?clientId=` | 无 | 心跳应答，收到 `PING` 后立即调用（`clientId` 取建连回执里的值） |
 | POST | `/sse/push` | 是 | 业务系统推送入口 |
 | GET | `/sse/admin/connections` | 无（需自行加固） | 连接概览：总数、模块分布、连接明细 |
 | DELETE | `/sse/admin/connections/{clientId}` | 无（需自行加固） | 强制下线指定连接 |
@@ -168,7 +168,7 @@ registry.addMapping("/**")
 | 400 | `bizModule` 与 `clientIds` 都为空 |
 | 401 | 缺少 `X-Sse-AppId` / `X-Sse-Key`，或二者不配对 |
 | 403 | `bizModule` 不在该应用白名单内 |
-| 409 | `clientId` 已在线（重连窗口） |
+| 409 | 服务端生成的 `clientId` 撞号（UUID，理论兜底，正常路径不会走到） |
 | 503 | 连接数达到 `max-connections` |
 
 ## 六、接入方式
@@ -176,8 +176,9 @@ registry.addMapping("/**")
 ### 6.1 浏览器接入
 
 ```javascript
-const clientId = crypto.randomUUID();   // 整个页面生命周期内保持不变（含自动重连）
-const es = new EventSource(`/sse/subscribe?clientId=${clientId}&modules=lot,order`);
+// clientId 由服务端分配：建连时不用传，重连即换
+let clientId = '';
+const es = new EventSource('/sse/subscribe?modules=lot,order');
 
 // 建连成功：必须重新拉取全量业务状态（服务端无快照、无补发）
 es.onopen = () => refreshAll();
@@ -185,7 +186,11 @@ es.onopen = () => refreshAll();
 // 业务消息：按 bizModule:action 路由
 es.addEventListener('MESSAGE', e => {
   const m = JSON.parse(e.data);
-  if (m.bizModule === 'sse') return;                       // 系统消息忽略
+  if (m.bizModule === 'sse') {
+    // 建连回执：服务端分配的 clientId，心跳应答与定向推送都依赖它
+    if (m.action === 'connected' && m.data?.clientId) clientId = m.data.clientId;
+    return;                                              // 系统消息忽略
+  }
   const key = `${m.bizModule}:${m.action}:${m.data.itemId ?? ''}`;
   if (m.ts <= (lastTs[key] || 0)) return;                  // 丢弃乱序/旧消息
   lastTs[key] = m.ts;
@@ -194,6 +199,7 @@ es.addEventListener('MESSAGE', e => {
 
 // 心跳：收到 PING 立即回 PONG，不要在客户端自己起定时器上报
 es.addEventListener('PING', () => {
+  if (!clientId) return;                                   // 回执未到，ID 还没有
   fetch(`/sse/pong?clientId=${clientId}`, {method: 'POST'});
 });
 
@@ -203,9 +209,11 @@ es.onerror = () => {};
 
 要点：
 
-1. `clientId` 必须写进 query 且全程不变，否则重连后订阅的模块会丢失。
-2. `es.onopen` 必须重新拉取全量状态——系统只保证在线期间的增量实时。
-3. 定向推送所需的 `clientId` 由页面建连后上报给业务系统，由业务系统自行维护 `clientId ↔ userId` 映射。
+1. `clientId` 由服务端建连时分配（UUID），随建连回执下发；客户端不用生成、也不用拼进 URL。
+2. `modules` 仍写进 query——浏览器自动重连会原样复用 URL，订阅模块靠它保住。
+3. `es.onopen` 必须重新拉取全量状态——系统只保证在线期间的增量实时。
+4. `clientId` **重连即换**：要按用户维度稳定寻址，优先用模块订阅，
+   或在业务系统侧维护「用户 → 当前 clientId」映射（页面每次建连后上报刷新）。
 
 ### 6.2 业务系统推送
 
@@ -234,7 +242,7 @@ curl -X POST http://localhost:8088/sse/push \
   -H 'Content-Type: application/json' \
   -H 'X-Sse-AppId: test' \
   -H 'X-Sse-Key: test_secret' \
-  -d '{"clientIds":["<页面生成的 clientId>"],"action":"bid","data":{"itemId":"L123"}}'
+  -d '{"clientIds":["<服务端建连回执下发的 clientId>"],"action":"bid","data":{"itemId":"L123"}}'
 ```
 
 Java 侧调用示例（Spring `RestClient`）：

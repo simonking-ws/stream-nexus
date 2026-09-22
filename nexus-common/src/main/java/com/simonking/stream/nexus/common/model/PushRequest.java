@@ -33,7 +33,10 @@ public class PushRequest {
     private String bizModule;
 
     /**
-     * 定向推送的客户端ID列表（客户端建连时传入，需由业务系统自行维护与用户的映射）
+     * 定向推送的客户端ID列表
+     *
+     * <p>ID 由<b>服务端</b>建连时分配、随建连回执下发给客户端，重连即换；
+     * 业务系统需自行维护它与用户的映射（客户端每次建连后上报刷新）。
      */
     private List<String> clientIds;
 

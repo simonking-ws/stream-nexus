@@ -159,6 +159,9 @@ public class AdminController {
 
     /**
      * 强制下线：走统一回收入口，连接主表与模块索引一起清理
+     *
+     * <p>{@code clientId} 是服务端建连时分配的，管理页从 {@link #connections()} 的台账里取，
+     * 不需要（也无法）由调用方自己构造。
      */
     @DeleteMapping("/connections/{clientId}")
     public Map<String, Object> kick(@PathVariable String clientId) {
