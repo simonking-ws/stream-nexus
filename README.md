@@ -28,6 +28,7 @@
 | 推送鉴权 | `X-Sse-AppId` + `X-Sse-Key` 配对校验（常量时间比对），并按应用限制可推送的模块白名单 |
 | 运维接口 | 在线连接查询与强制下线（`connections`）；推送应用 `appId`/`key` 的运行时增删（`apps`） |
 | 内置页面 | Thymeleaf：`/` 直达 `/admin`（默认：连接台账 + 一键下线 + 应用管理），`/console` 推送测试页（应用下拉、内容自定义、默认模块 `test`） |
+| 管理页登录 | `/admin`、`/console` 与 `/sse/admin/**` 需登录后访问（session 态），默认账号 `admin` / `adminsse`，可配置；页面顶栏「退出」登出 |
 
 ## 二、设计优势
 
@@ -108,7 +109,7 @@ registry.addMapping("/**")
 
 ### 冒烟验证
 
-0. 访问 `http://localhost:8088/` 会自动跳转 `http://localhost:8088/admin`（默认管理页）；点导航「推送测试」进入 `http://localhost:8088/console`。
+0. 访问 `http://localhost:8088/` 会自动跳转 `http://localhost:8088/admin`（默认管理页）；首次访问先跳登录页，用默认账号 `admin` / `adminsse` 登录后回跳；点导航「推送测试」进入 `http://localhost:8088/console`。
 1. 在推送测试页保持默认订阅模块 `test`，点击「连接」，状态变为「已连接」。
 2. 推送应用下拉默认选中内置应用 `test`（自动带出 key `test_secret`），业务模块默认 `test`、动作 `bid`，推送内容可直接改 JSON，点「推送」→ 日志出现 `test:bid` 及自定义字段，返回 `{"total":1,"success":1,"failed":0}`。
 3. 把模块改成未订阅的 `order` 再推 → `total=0`（无连接命中，属预期行为）。
@@ -276,6 +277,11 @@ restClient.post()
 | `nexus.sse.auth-enabled` | `true` | 是否开启推送鉴权（谁能推） |
 | `nexus.sse.connect-auth-enabled` | `false` | 是否开启**建连**鉴权（谁能连 `/sse/subscribe`） |
 | `nexus.sse.connect-auth-token` | `57yW56iL5pyd6Iqx5aSV5ou+` | 建连令牌，所有订阅方共用；开关打开且留空时建连一律拒绝 |
+| `nexus.sse.admin.auth-enabled` | `true` | 是否开启管理页登录（谁能打开运维页面、调运维接口） |
+| `nexus.sse.admin.username` | `admin` | 管理页登录账号 |
+| `nexus.sse.admin.password` | `adminsse` | 管理页登录口令，**部署务必改掉** |
+
+**三套鉴权互不干涉**：`auth-enabled` 管「谁能推」、`connect-auth-enabled` 管「谁能连」、`nexus.sse.admin.*` 管「谁能打开运维页面」。登录只守 `/admin`、`/console`、`/sse/admin/**`，`/sse/subscribe` 与 `/sse/push` 不走登录态。运维接口未登录返回 401 JSON，页面未登录 302 到 `/login`（带回跳地址）。
 
 **推送应用不在这里配置**：内置默认应用 `test` / `test_secret`（白名单 `*`，开箱即用），其余应用在管理页「推送应用（appId / key）」页签运行时增删改（apiKey 可自动生成：GUID → Base64），改动**仅内存生效，重启回到内置默认应用**。
 
@@ -310,7 +316,7 @@ chunked_transfer_encoding on;
 | ApiKey 明文 | 密钥可被日志落盘、请求可重放 | HMAC 签名 + nonce + 时间窗 |
 | 订阅/心跳应答无鉴权 | 任何人可订阅任意模块 | JWT 订阅票据 |
 | 同步扇出 | 慢消费者会阻塞推送线程 | 每连接有界出站队列 |
-| 运维接口无鉴权 | 暴露连接明细、可强制下线；`/sse/admin/apps` 还返回明文 apiKey | 加鉴权并限制内网访问 |
+| 运维接口弱鉴权 | 暴露连接明细、可强制下线；`/sse/admin/apps` 还返回明文 apiKey | 已加单账号登录（默认 `admin` / `adminsse`，**部署需改口令**）；仍应限制内网访问，账号体系演进方向为对接统一登录 |
 
 明确非目标：消息必达、离线补推、跨实例路由、消息持久化、端到端加密。
 
@@ -424,16 +430,19 @@ stream-nexus
     └── src/main/java/com/simonking/stream/nexus/sse
         ├── NexusSseApplication.java
         ├── auth/PushAuthInterceptor.java        # 推送鉴权
-        ├── config/SseProperties.java            # 全部可调参数
+        ├── auth/AdminAuthFilter.java            # 管理页登录拦截（session 态）
+        ├── config/SseProperties.java            # 推送 / 建连相关可调参数
+        ├── config/AdminAuthProperties.java      # 管理页登录账号口令
         ├── connection/SseClient.java            # 单连接运行时状态
         ├── connection/SseClientRegistry.java    # 连接主表 + 模块索引 + 统一回收
         ├── core/SseSender.java / SsePusher.java # 单条写入 / 扇出
         ├── schedule/HeartbeatTask.java          # 心跳下发 + 连接回收
         ├── auth/PushAppRegistry.java / PushApp.java  # 推送应用运行时注册表（内置 test/test_secret + 增删）
-        ├── controller/                          # 订阅 / 推送 / 运维接口 + PageController（页面跳转）
+        ├── controller/                          # 订阅 / 推送 / 运维接口 + PageController（页面跳转）+ LoginController（登录 / 登出）
         └── resources/templates/                 # Thymeleaf 页面
             ├── admin.html                       # 连接管理页（默认页：在线台账 / 强制下线）
-            └── console.html                     # 推送测试页（建连 / 推送 / 鉴权验证）
+            ├── console.html                     # 推送测试页（建连 / 推送 / 鉴权验证）
+            └── login.html                       # 登录页
 ├── nexus-websocket/            # WebSocket 推送服务（Netty + Spring MVC，端口 9090 / 8089）
 │   └── src/main/java/com/simonking/nexus/websocket
 │       ├── NettyServerRunner.java              # Netty 服务独立线程启动

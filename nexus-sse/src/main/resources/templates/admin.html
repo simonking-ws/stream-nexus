@@ -26,6 +26,7 @@
     <div class="meta">
         <span class="live"><i></i>LIVE</span>
         <span th:text="'心跳 ' + ${heartbeatInterval} + 's · 失联判定 ' + ${heartbeatTimeout} + 's · 连接上限 ' + ${maxConnections}"></span>
+        <a class="logout" th:href="@{/logout}" title="退出登录：清空会话并回到登录页">退出</a>
     </div>
 </div>
 

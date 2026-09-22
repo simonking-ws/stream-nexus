@@ -157,6 +157,26 @@
         requestAnimationFrame(frame);
     }
 
+    /* ==================== 运维接口 401 兜底 ==================== */
+
+    /**
+     * 运维接口（/sse/admin/**）返回 401，说明登录态没了（session 过期 / 服务重启），
+     * 直接跳登录页——否则页面只会一直显示「拉取失败：HTTP 401」，看不出要重新登录。
+     *
+     * <p>只认这一个前缀：/sse/push 的 401 是 appId / apiKey 不对，属于推送侧自己的错误，
+     * 跳登录页会把真正的原因（凭证填错）掩盖掉。
+     */
+    var rawFetch = window.fetch;
+    window.fetch = function (input, init) {
+        var url = typeof input === 'string' ? input : ((input && input.url) || '');
+        return rawFetch.apply(window, arguments).then(function (resp) {
+            if (resp.status === 401 && url.indexOf('/sse/admin/') === 0 && location.pathname !== '/login') {
+                location.href = '/login';
+            }
+            return resp;
+        });
+    };
+
     /* ==================== 数字滚动 / 闪动 ==================== */
 
     /**

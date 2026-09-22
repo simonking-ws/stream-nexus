@@ -237,6 +237,23 @@ body {
 
 .meta { color: var(--muted); font-size: 12px; margin-left: auto; display: flex; align-items: center; gap: 10px; }
 
+/* 顶栏「退出」：弱化到和 .meta 一个层级，hover 才转成危险色，免得抢 LIVE 的注意力 */
+.meta a.logout {
+    padding: 3px 11px;
+    border: 1px solid rgba(148, 163, 184, .25);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 12px;
+    text-decoration: none;
+    transition: .18s;
+}
+
+.meta a.logout:hover {
+    color: #fda4af;
+    border-color: rgba(251, 113, 133, .45);
+    background: rgba(251, 113, 133, .1);
+}
+
 /* LIVE 指示灯 */
 .live {
     align-items: center;
