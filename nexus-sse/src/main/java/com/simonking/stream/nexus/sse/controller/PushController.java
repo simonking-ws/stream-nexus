@@ -1,5 +1,6 @@
 package com.simonking.stream.nexus.sse.controller;
 
+import com.simonking.stream.nexus.common.constant.NexusConstants;
 import com.simonking.stream.nexus.common.constant.SseConstants;
 import com.simonking.stream.nexus.common.model.PushRequest;
 import com.simonking.stream.nexus.common.model.PushResult;
@@ -67,7 +68,7 @@ public class PushController {
             return;
         }
         request.setBizModule(CollectionUtils.isEmpty(request.getClientIds())
-                ? SseConstants.GLOBAL_MODULE
+                ? NexusConstants.GLOBAL_MODULE
                 : null);
     }
 
@@ -78,7 +79,7 @@ public class PushController {
         if (!appRegistry.isAuthEnabled() || allowed == null || !StringUtils.hasText(bizModule)) {
             return;
         }
-        if (allowed.contains(SseConstants.MODULE_WILDCARD)) {
+        if (allowed.contains(NexusConstants.MODULE_WILDCARD)) {
             return;
         }
         if (allowed.stream().noneMatch(m -> m.equals(bizModule))) {

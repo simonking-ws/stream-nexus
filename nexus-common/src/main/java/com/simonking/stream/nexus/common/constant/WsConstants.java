@@ -13,8 +13,10 @@ import com.simonking.stream.nexus.common.util.NexusUtils;
  * 两个服务互不影响，可同时部署。放在同一模块只是为了共用 {@code util} 与模型，
  * 不表示两者有任何运行时耦合。
  *
- * <p>两侧取值相同的常量已上提到 {@link NexusConstants}，这里保留同名引用，调用方无需感知。
- * 本类只放字面量常量，相关行为方法已收进 {@code util} 下的工具类：
+ * <p><b>两侧取值相同的常量一律直接用 {@link NexusConstants}（全局模块、白名单通配、建连令牌参数、
+ * 系统动作、代理头），本类不再重复定义同名别名</b>——别名只会让人分不清该改哪一处。
+ *
+ * <p>本类只放字面量常量，相关行为方法已收进 {@code util} 下的工具类：
  * 客户端ID 生成与全局模块判定见 {@link NexusUtils}，客户端IP 解析见 {@link IpUtils}。
  *
  * <p>Netty 侧的 Channel 属性键不在本类（见 {@code nexus-websocket} 的 {@code WsChannelKeys}）：
@@ -32,31 +34,6 @@ public final class WsConstants {
      * 业务模块禁止使用该值，否则客户端无法区分「系统消息」与「业务消息」
      */
     public static final String SYS_MODULE = "ws";
-
-    /**
-     * 全局模块：订阅它 = 订阅所有模块
-     */
-    public static final String GLOBAL_MODULE = NexusConstants.GLOBAL_MODULE;
-
-    /**
-     * 应用白名单中的通配模块：表示不限模块
-     */
-    public static final String MODULE_WILDCARD = NexusConstants.MODULE_WILDCARD;
-
-    /**
-     * 系统动作名：建连回执
-     */
-    public static final String ACTION_CONNECTED = NexusConstants.ACTION_CONNECTED;
-
-    /**
-     * 系统动作名：心跳探测（服务端 -> 客户端）
-     */
-    public static final String ACTION_PING = NexusConstants.ACTION_PING;
-
-    /**
-     * 系统动作名：心跳应答（客户端 -> 服务端）
-     */
-    public static final String ACTION_PONG = NexusConstants.ACTION_PONG;
 
     /**
      * 系统动作名：上行消息回显（测试页用）
@@ -82,11 +59,6 @@ public final class WsConstants {
      * 推送应用密钥 请求头
      */
     public static final String HEADER_API_KEY = "X-Ws-Key";
-
-    /**
-     * 建连令牌 查询参数（WebSocket 握手无法自定义请求头，只能走查询参数）
-     */
-    public static final String PARAM_CONNECT_TOKEN = NexusConstants.PARAM_CONNECT_TOKEN;
 
     /**
      * 订阅模块 查询参数，逗号分隔

@@ -1,5 +1,6 @@
 package com.simonking.stream.nexus.sse.auth;
 
+import com.simonking.stream.nexus.common.constant.NexusConstants;
 import com.simonking.stream.nexus.common.constant.SseConstants;
 import com.simonking.stream.nexus.sse.config.SseProperties;
 import jakarta.servlet.http.HttpServletRequest;
@@ -74,7 +75,7 @@ public class ConnectAuthInterceptor implements HandlerInterceptor {
         if (StringUtils.hasText(header)) {
             return header.trim();
         }
-        String param = request.getParameter(SseConstants.PARAM_CONNECT_TOKEN);
+        String param = request.getParameter(NexusConstants.PARAM_CONNECT_TOKEN);
         return StringUtils.hasText(param) ? param.trim() : null;
     }
 

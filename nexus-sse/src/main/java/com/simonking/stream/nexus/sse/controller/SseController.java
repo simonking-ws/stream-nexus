@@ -57,7 +57,7 @@ public class SseController {
      *                缺省或为空白时默认订阅 {@link SseConstants#GLOBAL_MODULE}（{@code *}，接收全部按模块推送的消息）
      */
     @GetMapping(path = "/sse/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe(@RequestParam(defaultValue = SseConstants.GLOBAL_MODULE) String modules,
+    public SseEmitter subscribe(@RequestParam(defaultValue = NexusConstants.GLOBAL_MODULE) String modules,
                                 HttpServletRequest request) {
         if (properties.getMaxConnections() > 0 && registry.size() >= properties.getMaxConnections()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "connection limit reached");
@@ -67,11 +67,11 @@ public class SseController {
         Set<String> moduleSet = Arrays.stream(modules.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
-                .map(m -> NexusUtils.isGlobal(m) ? SseConstants.GLOBAL_MODULE : m)
+                .map(m -> NexusUtils.isGlobal(m) ? NexusConstants.GLOBAL_MODULE : m)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         if (moduleSet.isEmpty()) {
-            moduleSet.add(SseConstants.GLOBAL_MODULE);
+            moduleSet.add(NexusConstants.GLOBAL_MODULE);
         }
 
         // 客户端ID 服务端生成：客户端不传、也无从伪造
@@ -95,7 +95,7 @@ public class SseController {
                     .id(IdGenerator.nextId())
                     .event(SseEvent.MESSAGE)
                     .bizModule(SseConstants.SYS_MODULE)
-                    .action(SseConstants.ACTION_CONNECTED)
+                    .action(NexusConstants.ACTION_CONNECTED)
                     .ts(System.currentTimeMillis())
                     .data(buildWelcome(clientId, moduleSet))
                     .build());

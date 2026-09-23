@@ -116,7 +116,7 @@ public class PushRequest {
 
 **强制约定**：`bizModule` 是路由键，订阅侧与推送侧取值必须完全一致（含大小写），否则**静默推空**（`total=0`，不报错）。建议维护一份模块命名清单（如 `lot` / `order` / `user`）。
 
-**全局模块 `*`**（`SseConstants.GLOBAL_MODULE`）：
+**全局模块 `*`**（`NexusConstants.GLOBAL_MODULE`）：
 
 - 订阅侧：`modules` 缺省或为空白时默认订阅它，避免客户端漏传参数后一条消息都收不到；
 - 推送侧：以 `*` 为目标时广播给全部在线连接；以其它模块为目标时，订阅 `*` 的连接**额外命中**——即每次按模块推送都会带上全局订阅者；
@@ -126,7 +126,7 @@ public class PushRequest {
 注意：
 
 - `*` 是业务可见的保留模块名，业务方不要再用它命名自己的业务模块，否则会与上述规则混淆；
-- 白名单里也有一个 `*`（`SseConstants.MODULE_WILDCARD`），语义是「该应用不限可推模块」，与全局模块名同形但**命名空间不同**，两者各自判断、不可混用。
+- 白名单里也有一个 `*`（`NexusConstants.MODULE_WILDCARD`），语义是「该应用不限可推模块」，与全局模块名同形但**命名空间不同**，两者各自判断、不可混用。
 
 ### 3.3 消息 ID 单调递增
 
@@ -145,7 +145,7 @@ long next = Math.max(System.currentTimeMillis(), prev + 1);  // CAS
 
 ```49:87:nexus-sse/src/main/java/com/simonking/stream/nexus/sse/controller/SseController.java
     @GetMapping(path = "/sse/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe(@RequestParam(defaultValue = SseConstants.GLOBAL_MODULE) String modules,
+    public SseEmitter subscribe(@RequestParam(defaultValue = NexusConstants.GLOBAL_MODULE) String modules,
                                 HttpServletRequest request) {
         if (properties.getMaxConnections() > 0 && registry.size() >= properties.getMaxConnections()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "connection limit reached");

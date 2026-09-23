@@ -1,6 +1,6 @@
 package com.simonking.stream.nexus.sse.auth;
 
-import com.simonking.stream.nexus.common.constant.SseConstants;
+import com.simonking.stream.nexus.common.constant.NexusConstants;
 import com.simonking.stream.nexus.sse.config.SseProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +52,7 @@ public class PushAppRegistry {
         this.authEnabled = properties.isAuthEnabled();
         // 默认应用不限制模块，方便本地联调任意 bizModule
         apps.put(DEFAULT_APP_ID, new PushApp(DEFAULT_APP_ID, DEFAULT_API_KEY,
-                List.of(SseConstants.MODULE_WILDCARD)));
+                List.of(NexusConstants.MODULE_WILDCARD)));
         log.info("推送应用载入完成，默认应用 {}/{}，鉴权开关 authEnabled={}", DEFAULT_APP_ID, DEFAULT_API_KEY, authEnabled);
     }
 
@@ -115,13 +115,13 @@ public class PushAppRegistry {
      */
     public static List<String> normalize(List<String> modules) {
         if (CollectionUtils.isEmpty(modules)) {
-            return List.of(SseConstants.MODULE_WILDCARD);
+            return List.of(NexusConstants.MODULE_WILDCARD);
         }
         List<String> normalized = modules.stream()
                 .filter(StringUtils::hasText)
                 .map(String::trim)
                 .distinct()
                 .toList();
-        return normalized.isEmpty() ? List.of(SseConstants.MODULE_WILDCARD) : normalized;
+        return normalized.isEmpty() ? List.of(NexusConstants.MODULE_WILDCARD) : normalized;
     }
 }

@@ -1,6 +1,7 @@
 package com.simonking.nexus.websocket.registry;
 
 import com.simonking.nexus.websocket.model.WsClient;
+import com.simonking.stream.nexus.common.constant.NexusConstants;
 import com.simonking.stream.nexus.common.constant.WsConstants;
 import com.simonking.stream.nexus.common.util.NexusUtils;
 import io.netty.channel.Channel;
@@ -195,11 +196,11 @@ public class WsClientRegistry {
                 if (trimmed.isEmpty()) {
                     continue;
                 }
-                result.add(NexusUtils.isGlobal(trimmed) ? WsConstants.GLOBAL_MODULE : trimmed);
+                result.add(NexusUtils.isGlobal(trimmed) ? NexusConstants.GLOBAL_MODULE : trimmed);
             }
         }
         if (result.isEmpty()) {
-            result.add(WsConstants.GLOBAL_MODULE);
+            result.add(NexusConstants.GLOBAL_MODULE);
         }
         return result;
     }

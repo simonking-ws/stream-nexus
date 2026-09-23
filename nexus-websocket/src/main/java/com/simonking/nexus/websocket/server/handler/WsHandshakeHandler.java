@@ -59,7 +59,7 @@ public class WsHandshakeHandler extends SimpleChannelInboundHandler<FullHttpRequ
         // 1. 建连鉴权：WebSocket 握手无法自定义请求头，令牌只能走查询参数
         if (properties.isConnectAuthEnabled()) {
             String expected = properties.getConnectAuthToken();
-            String actual = firstParam(decoder, WsConstants.PARAM_CONNECT_TOKEN);
+            String actual = firstParam(decoder, NexusConstants.PARAM_CONNECT_TOKEN);
             if (!StringUtils.hasText(expected) || actual == null
                     || !PushAppRegistry.constantTimeEquals(expected, actual)) {
                 log.warn("[ws] 建连令牌校验失败, uri={}, remote={}", request.uri(), ctx.channel().remoteAddress());

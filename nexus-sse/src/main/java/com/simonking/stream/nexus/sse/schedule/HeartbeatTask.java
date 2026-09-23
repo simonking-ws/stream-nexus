@@ -1,5 +1,6 @@
 package com.simonking.stream.nexus.sse.schedule;
 
+import com.simonking.stream.nexus.common.constant.NexusConstants;
 import com.simonking.stream.nexus.common.constant.SseConstants;
 import com.simonking.stream.nexus.common.enums.SseEvent;
 import com.simonking.stream.nexus.common.model.SseMessage;
@@ -66,7 +67,7 @@ public class HeartbeatTask {
                 sender.send(client, SseMessage.builder()
                         .event(SseEvent.PING)
                         .bizModule(SseConstants.SYS_MODULE)
-                        .action(SseConstants.ACTION_PING)
+                        .action(NexusConstants.ACTION_PING)
                         .ts(now)
                         .build());
             } catch (Exception e) {

@@ -11,8 +11,10 @@ import com.simonking.stream.nexus.common.util.NexusUtils;
  *
  * <p>只收协议级 / 系统级字面量，业务模块名（{@code lot} / {@code order}）由业务方自定义，不在此列。
  *
- * <p>两侧取值相同的常量已上提到 {@link NexusConstants}，这里保留同名引用，调用方无需感知。
- * 本类只放字面量常量，相关行为方法已收进 {@code util} 下的工具类：
+ * <p><b>两侧取值相同的常量一律直接用 {@link NexusConstants}（全局模块、白名单通配、建连令牌参数、
+ * 系统动作、代理头），本类不再重复定义同名别名</b>——别名只会让人分不清该改哪一处。
+ *
+ * <p>本类只放字面量常量，相关行为方法已收进 {@code util} 下的工具类：
  * 客户端ID 生成与全局模块判定见 {@link NexusUtils}，客户端IP 解析见 {@link IpUtils}。
  *
  * @author simonking
@@ -39,42 +41,6 @@ public final class SseConstants {
     public static final String SYS_MODULE = "sse";
 
     /**
-     * 全局模块名（{@code *}）：订阅 {@code modules} 为空时的默认值，同时是一条「全量通道」。
-     *
-     * <p>双向生效：
-     * <ul>
-     *     <li>订阅侧：{@code modules} 缺省或为空白时，默认订阅该模块；</li>
-     *     <li>推送侧：以它为 {@code bizModule} 时广播给全部在线连接；
-     *               以其它模块推送时，订阅它的连接同样会收到（每次按模块推送都带上 {@code *}）。</li>
-     * </ul>
-     *
-     * <p>例外：纯定向推送（只填 {@code clientIds}、无 {@code bizModule}）不扩散给 {@code *} 订阅者——
-     * 一对一消息不应泄露给无关连接。
-     *
-     * <p>保留名：业务方不得用 {@code *} 命名自己的业务模块，否则会与上述规则混淆。
-     * 它与 {@link #MODULE_WILDCARD} 同形（都是 {@code *}）但**命名空间不同**：
-     * 这里出现在「模块名」位置，那里出现在「模块白名单」位置（表示不限模块）。
-     */
-    public static final String GLOBAL_MODULE = NexusConstants.GLOBAL_MODULE;
-
-    /**
-     * 系统动作：建连成功通知（{@link com.simonking.stream.nexus.common.enums.SseEvent#MESSAGE}）
-     *
-     * <p>客户端收到后必须重新拉取全量业务状态——服务端无快照、无补发。
-     */
-    public static final String ACTION_CONNECTED = NexusConstants.ACTION_CONNECTED;
-
-    /**
-     * 系统动作：心跳探测（{@link com.simonking.stream.nexus.common.enums.SseEvent#PING}）
-     */
-    public static final String ACTION_PING = NexusConstants.ACTION_PING;
-
-    /**
-     * 系统动作：心跳应答（{@link com.simonking.stream.nexus.common.enums.SseEvent#PONG}）
-     */
-    public static final String ACTION_PONG = NexusConstants.ACTION_PONG;
-
-    /**
      * 推送鉴权请求头：应用标识（{@code X-Sse-AppId}）
      *
      * <p>用于**定位调用方**，服务端按它反查该应用允许推送的业务模块（白名单归属应用）。
@@ -93,30 +59,14 @@ public final class SseConstants {
     /**
      * 建连鉴权请求头：连接令牌（{@code X-Sse-Token}）
      *
-     * <p>仅在服务端开启建连鉴权时生效，与 {@link #PARAM_CONNECT_TOKEN} 二选一。
+     * <p>仅在服务端开启建连鉴权时生效，与 {@link NexusConstants#PARAM_CONNECT_TOKEN} 二选一。
      * 浏览器 {@code EventSource} 无法设置自定义请求头，此时只能用查询参数。
      */
     public static final String HEADER_CONNECT_TOKEN = "X-Sse-Token";
-
-    /**
-     * 建连鉴权查询参数名（{@code token}）
-     *
-     * <p>为 {@code EventSource} 这类无法带自定义头的客户端准备的传参通道；
-     * 服务端优先读 {@link #HEADER_CONNECT_TOKEN}，读不到再回退到该参数。
-     */
-    public static final String PARAM_CONNECT_TOKEN = NexusConstants.PARAM_CONNECT_TOKEN;
 
     /**
      * 鉴权通过后，该密钥允许推送的业务模块写入 {@code HttpServletRequest} 的属性名
      * （供下游做模块白名单校验）
      */
     public static final String ATTR_ALLOWED_MODULES = "sse.allowedModules";
-
-    /**
-     * 模块白名单通配符：不限制可推送的业务模块
-     *
-     * <p>与 {@link #GLOBAL_MODULE} 同形（都是 {@code *}），但只出现在「应用可推送模块白名单」里，
-     * 语义是「不限模块」，不是「只能推全局模块」。两者各自判断、互不复用。
-     */
-    public static final String MODULE_WILDCARD = NexusConstants.MODULE_WILDCARD;
 }

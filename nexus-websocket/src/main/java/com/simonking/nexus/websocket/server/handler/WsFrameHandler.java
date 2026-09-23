@@ -2,6 +2,7 @@ package com.simonking.nexus.websocket.server.handler;
 
 import com.simonking.nexus.websocket.config.WsProperties;
 import com.simonking.nexus.websocket.constant.WsChannelKeys;
+import com.simonking.stream.nexus.common.constant.NexusConstants;
 import com.simonking.nexus.websocket.model.WsClient;
 import com.simonking.nexus.websocket.model.WsMessage;
 import com.simonking.nexus.websocket.registry.WsClientRegistry;
@@ -58,7 +59,7 @@ public class WsFrameHandler extends SimpleChannelInboundHandler<TextWebSocketFra
                 write(client, WsMessage.builder()
                         .event(WsEvent.PING)
                         .bizModule(WsConstants.SYS_MODULE)
-                        .action(WsConstants.ACTION_PING)
+                        .action(NexusConstants.ACTION_PING)
                         .ts(System.currentTimeMillis())
                         .build());
             } else if (idle.state() == IdleState.READER_IDLE) {
@@ -160,7 +161,7 @@ public class WsFrameHandler extends SimpleChannelInboundHandler<TextWebSocketFra
         write(client, WsMessage.builder()
                 .event(WsEvent.CONNECTED)
                 .bizModule(WsConstants.SYS_MODULE)
-                .action(WsConstants.ACTION_CONNECTED)
+                .action(NexusConstants.ACTION_CONNECTED)
                 .ts(System.currentTimeMillis())
                 .data(data)
                 .build());

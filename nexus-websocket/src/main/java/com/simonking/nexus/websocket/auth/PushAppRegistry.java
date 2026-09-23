@@ -1,7 +1,7 @@
 package com.simonking.nexus.websocket.auth;
 
 import com.simonking.nexus.websocket.config.WsProperties;
-import com.simonking.stream.nexus.common.constant.WsConstants;
+import com.simonking.stream.nexus.common.constant.NexusConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
@@ -48,7 +48,7 @@ public class PushAppRegistry {
 
     public PushAppRegistry(WsProperties properties) {
         this.authEnabled = properties.isAuthEnabled();
-        apps.put(DEFAULT_APP_ID, new PushApp(DEFAULT_APP_ID, DEFAULT_API_KEY, List.of(WsConstants.MODULE_WILDCARD)));
+        apps.put(DEFAULT_APP_ID, new PushApp(DEFAULT_APP_ID, DEFAULT_API_KEY, List.of(NexusConstants.MODULE_WILDCARD)));
         log.info("推送应用载入完成，默认应用 {}/{}，鉴权开关 authEnabled={}", DEFAULT_APP_ID, DEFAULT_API_KEY, authEnabled);
     }
 
@@ -67,14 +67,14 @@ public class PushAppRegistry {
      */
     public static List<String> normalize(List<String> modules) {
         if (CollectionUtils.isEmpty(modules)) {
-            return List.of(WsConstants.MODULE_WILDCARD);
+            return List.of(NexusConstants.MODULE_WILDCARD);
         }
         List<String> normalized = modules.stream()
                 .filter(StringUtils::hasText)
                 .map(String::trim)
                 .distinct()
                 .toList();
-        return normalized.isEmpty() ? List.of(WsConstants.MODULE_WILDCARD) : normalized;
+        return normalized.isEmpty() ? List.of(NexusConstants.MODULE_WILDCARD) : normalized;
     }
 
     public boolean isAuthEnabled() {
@@ -116,7 +116,7 @@ public class PushAppRegistry {
         if (allowed == null || !StringUtils.hasText(bizModule)) {
             return true;
         }
-        if (allowed.contains(WsConstants.MODULE_WILDCARD)) {
+        if (allowed.contains(NexusConstants.MODULE_WILDCARD)) {
             return true;
         }
         return allowed.stream().anyMatch(m -> m.equals(bizModule));

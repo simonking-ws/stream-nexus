@@ -420,10 +420,18 @@ stream-nexus
 ├── docs/                       # 设计文档
 ├── nexus-common/               # 跨模块契约
 │   └── src/main/java/com/simonking/stream/nexus/common
-│       ├── constant/SseConstants.java     # 协议层常量（鉴权头、系统模块、通配符）
-│       ├── enums/SseEvent.java             # MESSAGE / PING / PONG
-│       ├── model/                         # SseMessage / PushRequest / PushResult
-│       └── util/IdGenerator.java          # 单调递增消息 ID（CAS）
+│       ├── constant/
+│       │   ├── NexusConstants.java          # SSE / WS 取值相同的常量（全局模块、白名单通配、建连令牌、系统动作、代理头）
+│       │   ├── SseConstants.java            # SSE 协议常量（鉴权头、系统模块）
+│       │   └── WsConstants.java             # WS 协议常量（鉴权头、系统模块、关闭码）
+│       ├── enums/
+│       │   ├── SseEvent.java                # MESSAGE / PING / PONG
+│       │   └── WsEvent.java                 # CONNECTED / MESSAGE / PING / PONG / KICKED
+│       ├── model/                           # SseMessage / PushRequest / PushResult
+│       └── util/
+│           ├── IdGenerator.java             # 单调递增消息 ID（CAS）
+│           ├── IpUtils.java                 # 客户端 IP 解析（代理链 + IPv6 归一）
+│           └── NexusUtils.java              # 客户端ID 生成 + 全局模块判定
 └── nexus-sse/                  # 推送服务实现（端口 8088）
     ├── Dockerfile              # 多阶段构建：Maven 打包 + JRE 运行（非 root）
     ├── docker-compose.yml      # 单机编排（context: ..，配置用环境变量覆盖）

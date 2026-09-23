@@ -3,7 +3,7 @@ package com.simonking.nexus.websocket.core;
 import com.simonking.nexus.websocket.model.WsClient;
 import com.simonking.nexus.websocket.model.WsMessage;
 import com.simonking.nexus.websocket.registry.WsClientRegistry;
-import com.simonking.stream.nexus.common.constant.WsConstants;
+import com.simonking.stream.nexus.common.constant.NexusConstants;
 import com.simonking.stream.nexus.common.enums.WsEvent;
 import com.simonking.stream.nexus.common.model.PushRequest;
 import com.simonking.stream.nexus.common.model.PushResult;
@@ -125,7 +125,7 @@ public class WsPusher {
                 }
             }
             // 全局订阅者无条件叠加
-            for (WsClient client : registry.byModule(WsConstants.GLOBAL_MODULE)) {
+            for (WsClient client : registry.byModule(NexusConstants.GLOBAL_MODULE)) {
                 result.putIfAbsent(client.getClientId(), client);
             }
         }
