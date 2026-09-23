@@ -34,6 +34,13 @@ public class PushController {
 
     /**
      * 推送：按业务模块广播、按客户端定向，或两者同时指定
+     *
+     * <p>{@code bizModule} 缺省（null / 空白）按全局模块 {@link SseConstants#GLOBAL_MODULE} 处理：
+     * 广播给全部在线连接，与显式传 {@code *} 完全等价——省掉「只想群发还得知道模块名」这一道门槛，
+     * 也让「什么寻址字段都不填」不再是 400。
+     *
+     * <p>归一化必须放在这里、且在白名单校验**之前**：否则受限应用（白名单只有某几个模块）
+     * 只要把模块留空就能广播全员，等于绕过 {@link #checkModulePermission}。
      */
     @PostMapping("/push")
     public PushResult push(@RequestBody PushRequest request, HttpServletRequest httpRequest) {
@@ -41,13 +48,27 @@ public class PushController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request must not be empty");
         }
 
-        if (!StringUtils.hasText(request.getBizModule()) && CollectionUtils.isEmpty(request.getClientIds())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "bizModule or clientIds is required");
-        }
+        normalizeBizModule(request);
 
         List<String> allowed = (List<String>) httpRequest.getAttribute(SseConstants.ATTR_ALLOWED_MODULES);
         checkModulePermission(allowed, request.getBizModule());
         return pusher.push(request);
+    }
+
+    /**
+     * 缺省业务模块 → 全局模块 {@code *}
+     *
+     * <p>{@code clientIds} 也为空时归一化为 {@code *}（全模块广播）；
+     * 但同时带了 {@code clientIds} 时保持纯定向——那是一次一对一推送，
+     * 漏填模块不该把消息扩散给所有连接（否则「定向推送不扩散」这条约定就被悄悄破了）。
+     */
+    private void normalizeBizModule(PushRequest request) {
+        if (StringUtils.hasText(request.getBizModule())) {
+            return;
+        }
+        request.setBizModule(CollectionUtils.isEmpty(request.getClientIds())
+                ? SseConstants.GLOBAL_MODULE
+                : null);
     }
 
     /**

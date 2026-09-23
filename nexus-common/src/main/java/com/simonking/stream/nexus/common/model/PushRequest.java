@@ -19,6 +19,9 @@ import java.util.List;
  * <p>{@code bizModule} 同时是消息体字段与路由键，推送侧与订阅侧取值必须完全一致（含大小写），
  * 否则会静默推空。
  *
+ * <p>{@code bizModule} 缺省（null / 空白）时按全局模块 {@code *} 处理：广播给全部在线连接，
+ * 与显式传 {@code *} 等价；但指定了 {@code clientIds} 时保持纯定向，不扩散到无关连接。
+ *
  * @author simonking
  */
 @Data
@@ -28,7 +31,9 @@ import java.util.List;
 public class PushRequest {
 
     /**
-     * 目标业务模块，如 lot / order。与 {@code clientIds} 至少填一个
+     * 目标业务模块，如 lot / order。
+     *
+     * <p>留空按全局模块 {@code *} 处理（广播全部在线连接）；带 {@code clientIds} 时留空则为纯定向
      */
     private String bizModule;
 

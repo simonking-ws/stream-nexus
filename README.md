@@ -20,7 +20,7 @@
 | 功能 | 说明 |
 | --- | --- |
 | 长连接订阅 | `GET /sse/subscribe`，连接永不过期，一条连接可同时订阅多个业务模块；`modules` 留空默认订阅 `*` |
-| 双寻址推送 | 按 `bizModule` 广播、按 `clientId` 定向，两者可同时使用（命中并集、按连接去重） |
+| 双寻址推送 | 按 `bizModule` 广播、按 `clientId` 定向，两者可同时使用（命中并集、按连接去重）；`bizModule` **留空默认全模块**（等同 `*`，广播全部连接），但带了 `clientIds` 时仍是纯定向、不扩散 |
 | 全局模块 `*` | 订阅侧默认值；推 `*` = 广播给全部在线连接，推其它模块时订阅 `*` 的连接同样会收到（纯定向推送不扩散）；它与白名单里的 `*` 同形但语义不同（后者 = 不限模块） |
 | 全局跨域 | `WebMvcConfigurer#addCorsMappings` 注册 `/**`，源 / 方法 / 头 / 凭证全量放行，无需配置 |
 | 心跳保活 | 服务端每 15s 下发 `PING`，客户端回 `PONG`，同时压制 LB / NAT 空闲断链 |
@@ -166,9 +166,9 @@ registry.addMapping("/**")
 
 | 码 | 场景 |
 | --- | --- |
-| 400 | `bizModule` 与 `clientIds` 都为空 |
+| 400 | 请求体为空 |
 | 401 | 缺少 `X-Sse-AppId` / `X-Sse-Key`，或二者不配对 |
-| 403 | `bizModule` 不在该应用白名单内 |
+| 403 | `bizModule` 不在该应用白名单内（含缺省后按 `*` 处理的情况） |
 | 409 | 服务端生成的 `clientId` 撞号（UUID，理论兜底，正常路径不会走到） |
 | 503 | 连接数达到 `max-connections` |
 
@@ -229,6 +229,9 @@ curl -X POST http://localhost:8088/sse/push \
         "data": {"itemId": "L123", "currentPrice": 5200}
       }'
 ```
+
+> `bizModule` 留空（或省略该字段）且不带 `clientIds` 时按全模块 `*` 处理，广播给全部在线连接；
+> 想定向就填 `clientIds`（此时不叠加全模块，一对一消息不会扩散）。
 
 响应：
 

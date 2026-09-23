@@ -93,7 +93,7 @@
 | 按客户端定向 | —（只要在线即可，`clientId` 由服务端分配） | `{"clientIds":["C1"], ...}` | 指定 clientId 的连接 |
 | 两者同时 | — | 两个字段都填 | **并集**，按 clientId 去重 |
 | 全局订阅 | `/sse/subscribe`（`modules` 留空，默认 `*`） | 任意 `bizModule` 推送 | 每次按模块推送都会收到 |
-| 全局广播 | — | `{"bizModule":"*", ...}` | 全部在线连接 |
+| 全局广播 | — | `{"bizModule":"*", ...}` 或 `bizModule` 留空 | 全部在线连接 |
 
 **`clientId` 由服务端分配**（UUID，见 `SseConstants.newClientId()`），客户端建连时不传、也无从伪造，
 只随建连回执（`sse/connected` 的 `data.clientId`）下发给客户端：
@@ -107,7 +107,7 @@
 
 ```java
 public class PushRequest {
-    private String bizModule;      // 按模块广播，与 clientIds 至少填一个
+    private String bizModule;      // 按模块广播；留空按全局模块 * 处理（带 clientIds 时为纯定向）
     private List<String> clientIds; // 定向推送，可选
     private String action;
     private Object data;
@@ -120,7 +120,8 @@ public class PushRequest {
 
 - 订阅侧：`modules` 缺省或为空白时默认订阅它，避免客户端漏传参数后一条消息都收不到；
 - 推送侧：以 `*` 为目标时广播给全部在线连接；以其它模块为目标时，订阅 `*` 的连接**额外命中**——即每次按模块推送都会带上全局订阅者；
-- 例外：纯定向推送（只填 `clientIds`）不叠加全局模块，一对一消息不扩散给无关连接。
+- **`bizModule` 缺省（null / 空白）等价于显式写 `*`**：在 `PushController.normalizeBizModule` 里归一化，且归一化发生在白名单校验**之前**——否则受限应用只要留空模块就能广播全员，等于绕过鉴权；
+- 例外：纯定向推送（只填 `clientIds`）不叠加全局模块，一对一消息不扩散给无关连接。同上理由，此时 `bizModule` 留空**不会**被归一化成 `*`，仍是定向。
 
 注意：
 
@@ -243,7 +244,7 @@ long next = Math.max(System.currentTimeMillis(), prev + 1);  // CAS
 - 应用管理接口：`GET /sse/admin/apps`（返回明文 apiKey 与 `defaultAppId`，供测试页下拉使用）、`GET /sse/admin/apps/generate-key`（服务端生成 GUID 并做 Base64 编码，避免人工起弱口令）、`POST /sse/admin/apps`（apiKey 留空则自动生成；重名 → 409）、`PUT /sse/admin/apps/{appId}`（修改：只改传了的字段，apiKey 留空 / `allowedModules` 为 null 表示不改，`allowedModules` 空数组表示不限模块；appId 不存在 → 404）、`DELETE /sse/admin/apps/{appId}`；
 - `PushController.checkModulePermission` 做**业务模块白名单**：白名单归属 appId，如新建的 `order-svc` 只允许 `order`，推其它模块返回 403；
 - 目标解析见 `SsePusher.resolveTargets`：按模块命中 ∪ 定向命中，按 clientId 去重，一条连接不会被重复投递；
-- `bizModule` 与 `clientIds` 同时为空 → 400；
+- `bizModule` 缺省 → 在校验前归一化为 `*` → 全模块广播（带 `clientIds` 时为纯定向）；请求体为空 → 400；
 - 跨域由 `WebMvcConfig#addCorsMappings` 全局注册（`/**`，全量放行，无配置项）；`/sse/push` 的 `OPTIONS` 预检不带鉴权头，`PushAuthInterceptor` 对预检直接放行，避免浏览器侧跨域推送被 401 挡掉。
 
 ---
@@ -495,4 +496,4 @@ chunked_transfer_encoding on;
 3. 推送应用下拉默认选中内置应用 `test`（key `test_secret` 自动带出），业务模块默认 `test`（订阅默认值也是 `test`），推送内容可直接在 JSON 里改，点「推送」→ 日志出现 `test:bid` 及自定义字段，返回 `{"total":1,"success":1,"failed":0}`；把模块改成未订阅的 `order` 再推 → `total=0`（静默推空，是预期行为）；
 4. `curl http://localhost:8088/sse/admin/connections` 查看连接与模块统计；定向验证：把页面显示的 clientId 填进「定向 clientId」后再推送 → 只有该连接收到；
 5. **心跳验证**：打开页面后观察日志每 15s 收到一次 `PING` 并回 `PONG`（Network 面板可见 `/sse/pong`）；**回收验证**：直接断网，观察 90s 内服务端日志出现 `recycle by heartbeat timeout`；
-6. **鉴权验证**：不带 `X-Sse-Key` 或 `X-Sse-AppId` 未登记，请求 `/sse/push` 应返回 401（两者不配对也 401）；在管理页新增一个只允许 `order` 的应用，用它推 `bizModule=test` 应返回 403；两个寻址字段都不填应返回 400。
+6. **鉴权验证**：不带 `X-Sse-Key` 或 `X-Sse-AppId` 未登记，请求 `/sse/push` 应返回 401（两者不配对也 401）；在管理页新增一个只允许 `order` 的应用，用它推 `bizModule=test` 应返回 403，用它**留空 `bizModule`** 同样应返回 403（不允许靠留空绕过白名单）；无白名单限制的应用两个寻址字段都不填应全模块广播（`total` = 在线连接数）。

@@ -26,6 +26,10 @@ import java.util.concurrent.atomic.LongAdder;
  * <p>两种寻址方式：按业务模块广播、按客户端定向。同时指定时取并集并按 clientId 去重。
  * 全局模块 {@link SseConstants#GLOBAL_MODULE} 参与两侧路由，见 {@link #resolveTargets(PushRequest)}。
  *
+ * <p>{@code bizModule} 缺省已在
+ * {@link com.simonking.stream.nexus.sse.controller.PushController} 归一化为 {@code *}（纯定向除外），
+ * 因此这里拿到的 {@code bizModule} 为空时一定是一次纯定向推送。
+ *
  * @author simonking
  */
 @Slf4j
