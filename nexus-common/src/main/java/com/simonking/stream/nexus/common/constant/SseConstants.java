@@ -41,6 +41,22 @@ public final class SseConstants {
     public static final String SYS_MODULE = "sse";
 
     /**
+     * REST 推送接口路径：业务系统推消息的唯一入口
+     *
+     * <p>客户端 SDK 的 {@code ssePush} 拼请求地址时取自这里，与下发的 {@link #HTTP_PORT} 一起构成默认地址，
+     * 避免 SDK 把路径写死后服务端改不动。
+     */
+    public static final String PUSH_PATH = "/sse/push";
+
+    /**
+     * REST 推送默认 HTTP 端口（{@code server.port}）
+     *
+     * <p>SSE 与 WebSocket 是两个独立服务、各占一个端口（8088 / 8089），
+     * SDK 的两个推送方法各自取各自的默认值。
+     */
+    public static final int HTTP_PORT = 8088;
+
+    /**
      * 推送鉴权请求头：应用标识（{@code X-Sse-AppId}）
      *
      * <p>用于**定位调用方**，服务端按它反查该应用允许推送的业务模块（白名单归属应用）。

@@ -13,12 +13,14 @@
     </parent>
 
     <groupId>com.simonking.nexus</groupId>
-    <artifactId>nexus-websocket-client</artifactId>
+    <artifactId>nexus-client</artifactId>
     <version>1.0.0</version>
-    <name>nexus-websocket-client</name>
+    <name>nexus-client</name>
     <description>
-        nexus-websocket 的 TCP 长连接推送客户端：builder 拼参数，之后直接调 push() 推消息，
-        由服务端扇出到 WebSocket 终端。运行期只依赖 netty / jackson / slf4j，无需编写 Netty / WebSocket 代码。
+        nexus 推送的客户端 SDK：REST（NexusRestClient，okhttp，ssePush 推 SSE 服务 / wsPush 推 WebSocket 服务，
+        同步拿回执）、TCP 长连接（NexusTcpClient，高频、发后不管）。builder 拼参数后直接推，
+        由服务端扇出到终端，无需编写 SSE / WebSocket 服务端代码。
+        名字不带 websocket 是因为它同时对接 SSE 与 WebSocket 两个推送服务。
     </description>
 
     <properties>
@@ -33,6 +35,13 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId>
+        </dependency>
+
+        <!-- REST 推送通道（NexusRestClient）：一次 HTTP POST 拿到回执 -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <optional>true</optional>
         </dependency>
 
         <dependency>

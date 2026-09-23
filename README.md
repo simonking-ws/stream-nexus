@@ -10,7 +10,7 @@
 | WebSocket | `nexus-websocket` | 原生 `WebSocket` | HTTP `POST /ws/push`，或 TCP 长连接（默认 9091） | 9090 / 8089 / 9091 |
 
 - 技术栈：Spring Boot 4.1.1 / Java 17 / Spring MVC（`spring-boot-starter-webmvc`）+ Netty 4.2
-- 模块：`nexus-common`（跨模块契约） + `nexus-sse`（SSE 推送服务） + `nexus-websocket`（WebSocket 推送服务） + `nexus-websocket-client`（独立客户端 SDK）
+- 模块：`nexus-common`（跨模块契约） + `nexus-sse`（SSE 推送服务） + `nexus-websocket`（WebSocket 推送服务） + `nexus-client`（独立客户端 SDK，两个服务都对接）
 - 完整设计文档：[docs/SSE推送系统设计文档.md](docs/SSE推送系统设计文档.md)；WebSocket 通道设计原型见 [《神了，WebSocket 竟然可以这么设计！》](https://juejin.cn/post/7592079304924889098)
 
 ---
@@ -343,7 +343,7 @@ WebSocket 是「全双工、可上行、适合高频交互」。两者**协议�
      └── 8089  HTTP            —— REST 推送入口 / 管理界面 / 测试页 / 运维接口
           ▲
           │  HTTP POST /ws/push（短连接）或 TCP 长连接（9091）
-   业务系统 ← nexus-websocket-client（或直接 HTTP 调用）
+   业务系统 ← nexus-client（或直接 HTTP 调用）
 ```
 
 Netty 与 Spring MVC 在**同一进程内共享连接注册表**：REST / TCP 收到推送 → 查注册表 → 直接写 WebSocket 通道。
@@ -374,7 +374,7 @@ TCP 通道让业务系统**一条长连接一直推**，还能靠心跳提前发
 
 台账接口：`GET /ws/admin/tcp/connections`（哪些业务系统连着、推了多少条）。
 
-业务系统侧不用自己写 Netty：`nexus-websocket-client` 里的 `NexusTcpClient` 已封装好
+业务系统侧不用自己写 Netty：`nexus-client` 里的 `NexusTcpClient` 已封装好
 （Netty 实现，与服务端同一套编解码器；自带心跳、断线重连；推送不等回执，写完即返回；
 SDK 按 Java 8 编译，老系统可直接引入）：
 
@@ -409,7 +409,7 @@ java -jar nexus-websocket/target/nexus-websocket-1.0.0.jar
 
 1. <http://localhost:8089/admin> 连接管理页（默认页）：在线连接台账、模块分布、强制下线、推送应用管理
 2. <http://localhost:8089/console> 推送测试页：建连 → 应答心跳 → 推送 → 看日志
-3. 业务系统引入 `nexus-websocket-client` 后运行 `TcpPushDemo` 的 `main`（长连接通道，无需鉴权），即可看到消息落到页面
+3. 业务系统引入 `nexus-client` 后运行 `TcpPushDemo` 的 `main`（长连接通道，无需鉴权），即可看到消息落到页面
 
 ### REST 推送接口
 
@@ -505,9 +505,10 @@ stream-nexus
 │       ├── registry/TcpClientRegistry.java     # 业务系统接入连接表
 │       ├── core/                               # WsPusher（寻址 + 扇出）/ PushService（REST 校验）/ TcpPushService（TCP 校验）
 │       └── controller/                         # 页面跳转 / REST 推送 / 运维接口
-└── nexus-websocket-client/     # 客户端 SDK（继承父 POM 编译，按 Java 8 出包）
+└── nexus-client/               # 客户端 SDK（继承父 POM 编译，按 Java 8 出包）
     ├── README.md                               # 接入文档
     └── src/main/java/com/simonking/nexus/ws/client
+        ├── rest/NexusRestClient.java           # REST 通道：ssePush / wsPush，一次 POST 同步拿回执
         ├── tcp/NexusTcpClient.java             # 客户端本体：Lombok builder 拼参数，push() 直接推
         ├── tcp/TcpClientHandler.java           # 回收执 / 答应心跳 / 发现链路断开
         └── exception/PushException.java

@@ -51,6 +51,12 @@ public final class WsConstants {
     public static final String PUSH_PATH = "/ws/push";
 
     /**
+     * REST 推送默认 HTTP 端口（{@code server.port}）：客户端 SDK 的默认端口取自这里，
+     * 与 {@code TcpConstants.TCP_PORT} 同理——改了服务端口而 SDK 没同步发布，线上就是连不上
+     */
+    public static final int HTTP_PORT = 8089;
+
+    /**
      * 推送应用ID 请求头
      */
     public static final String HEADER_APP_ID = "X-Ws-AppId";
