@@ -50,7 +50,7 @@
 
 | 类 | 包 | 职责 |
 | --- | --- | --- |
-| `SseMessage` / `EventEnum` / `PushRequest` / `PushResult` | `common` | 跨模块契约，业务系统也依赖它 |
+| `SseMessage` / `SseEvent` / `PushRequest` / `PushResult` | `common` | 跨模块契约，业务系统也依赖它 |
 | `SseConstants` | `common.constant` | 协议层字符串常量（`SYS_MODULE` / `ACTION_*` / 鉴权头 / 通配符） |
 | `IdGenerator` | `common.util` | 单调递增消息 ID（CAS 实现） |
 | `SseProperties` | `sse.config` | 全部可调参数 |
@@ -95,13 +95,13 @@
 | 全局订阅 | `/sse/subscribe`（`modules` 留空，默认 `*`） | 任意 `bizModule` 推送 | 每次按模块推送都会收到 |
 | 全局广播 | — | `{"bizModule":"*", ...}` 或 `bizModule` 留空 | 全部在线连接 |
 
-**`clientId` 由服务端分配**（UUID，见 `SseConstants.newClientId()`），客户端建连时不传、也无从伪造，
+**`clientId` 由服务端分配**（UUID，见 `NexusUtils.newClientId()`），客户端建连时不传、也无从伪造，
 只随建连回执（`sse/connected` 的 `data.clientId`）下发给客户端：
 
 - 不让客户端自带 ID 是有意的：自带意味着客户端可以声明任意身份，服务端要么承担被冒用的风险，要么再叠一层令牌校验；
 - 代价是它**随连接生命周期变化**（重连即换）：要按用户维度稳定寻址，优先用模块订阅，
   或在业务系统侧维护「用户 → 当前 clientId」映射（客户端每次建连后上报刷新）；
-- 与 `nexus-websocket` 的 `WsConstants.newClientId()` 同口径，两个服务的客户端接入方式一致。
+- 与 `nexus-websocket` 共用 `nexus-common` 的 `NexusUtils.newClientId()`，两个服务的客户端接入方式一致。
 
 `PushRequest` 结构（`groups` 已删除）：
 
@@ -151,9 +151,11 @@ long next = Math.max(System.currentTimeMillis(), prev + 1);  // CAS
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "connection limit reached");
         }
         ...
-        String clientId = SseConstants.newClientId();   // 服务端分配，客户端不传
+        String clientId = NexusUtils.newClientId();   // 服务端分配，客户端不传
         SseEmitter emitter = new SseEmitter(0L);
-        SseClient client = new SseClient(clientId, emitter, moduleSet, resolveClientIp(request));
+        SseClient client = new SseClient(clientId, emitter, moduleSet,
+                IpUtils.resolve(request.getHeader(NexusConstants.HEADER_X_FORWARDED_FOR),
+                        request.getHeader(NexusConstants.HEADER_X_REAL_IP), request.getRemoteAddr()));
         if (!registry.add(client)) {                    // UUID 撞号的理论兜底
             throw new ResponseStatusException(HttpStatus.CONFLICT, "clientId already connected: " + clientId);
         }
@@ -188,7 +190,7 @@ long next = Math.max(System.currentTimeMillis(), prev + 1);  // CAS
             }
             try {
                 sender.send(client, SseMessage.builder()
-                        .event(EventEnum.PING)            // 判据3：下发心跳，等客户端回 PONG
+                        .event(SseEvent.PING)             // 判据3：下发心跳，等客户端回 PONG
                         ...build());
             } catch (Exception e) {
                 registry.remove(client.getClientId());   // 判据4：写入失败

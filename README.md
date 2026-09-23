@@ -421,7 +421,7 @@ stream-nexus
 ├── nexus-common/               # 跨模块契约
 │   └── src/main/java/com/simonking/stream/nexus/common
 │       ├── constant/SseConstants.java     # 协议层常量（鉴权头、系统模块、通配符）
-│       ├── enums/EventEnum.java           # MESSAGE / PING / PONG
+│       ├── enums/SseEvent.java             # MESSAGE / PING / PONG
 │       ├── model/                         # SseMessage / PushRequest / PushResult
 │       └── util/IdGenerator.java          # 单调递增消息 ID（CAS）
 └── nexus-sse/                  # 推送服务实现（端口 8088）

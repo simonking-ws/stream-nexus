@@ -1,9 +1,12 @@
 package com.simonking.stream.nexus.sse.controller;
 
+import com.simonking.stream.nexus.common.constant.NexusConstants;
 import com.simonking.stream.nexus.common.constant.SseConstants;
-import com.simonking.stream.nexus.common.enums.EventEnum;
+import com.simonking.stream.nexus.common.enums.SseEvent;
 import com.simonking.stream.nexus.common.model.SseMessage;
 import com.simonking.stream.nexus.common.util.IdGenerator;
+import com.simonking.stream.nexus.common.util.IpUtils;
+import com.simonking.stream.nexus.common.util.NexusUtils;
 import com.simonking.stream.nexus.sse.config.SseProperties;
 import com.simonking.stream.nexus.sse.connection.SseClient;
 import com.simonking.stream.nexus.sse.connection.SseClientRegistry;
@@ -12,7 +15,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -46,7 +48,7 @@ public class SseController {
     /**
      * 建立 SSE 长连接（永不过期）
      *
-     * <p>客户端ID 由<b>服务端</b>生成（{@link SseConstants#newClientId()}），客户端只带订阅模块即可：
+     * <p>客户端ID 由<b>服务端</b>生成（{@link NexusUtils#newClientId()}），客户端只带订阅模块即可：
      * 自带ID 意味着客户端可以声明任意身份，服务端要么承担被冒用的风险，要么再叠一层令牌校验。
      * 生成的 ID 随建连回执下发，客户端保存后用于心跳应答与定向推送寻址。
      *
@@ -65,7 +67,7 @@ public class SseController {
         Set<String> moduleSet = Arrays.stream(modules.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
-                .map(m -> SseConstants.isGlobal(m) ? SseConstants.GLOBAL_MODULE : m)
+                .map(m -> NexusUtils.isGlobal(m) ? SseConstants.GLOBAL_MODULE : m)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         if (moduleSet.isEmpty()) {
@@ -73,7 +75,7 @@ public class SseController {
         }
 
         // 客户端ID 服务端生成：客户端不传、也无从伪造
-        String clientId = SseConstants.newClientId();
+        String clientId = NexusUtils.newClientId();
 
         // 0 = 永不过期，回收完全交给 HeartbeatTask
         SseEmitter emitter = new SseEmitter(0L);
@@ -91,7 +93,7 @@ public class SseController {
         try {
             sender.send(client, SseMessage.builder()
                     .id(IdGenerator.nextId())
-                    .event(EventEnum.MESSAGE)
+                    .event(SseEvent.MESSAGE)
                     .bizModule(SseConstants.SYS_MODULE)
                     .action(SseConstants.ACTION_CONNECTED)
                     .ts(System.currentTimeMillis())
@@ -105,7 +107,7 @@ public class SseController {
     }
 
     /**
-     * 心跳应答：客户端收到 {@link EventEnum#PING} 后上报，证明「我还活着」。
+     * 心跳应答：客户端收到 {@link SseEvent#PING} 后上报，证明「我还活着」。
      *
      * <p>永不过期策略下这是判断连接存活的**唯一依据**——半开连接下服务端 {@code send()} 依然返回成功，
      * 必须由客户端应答才能发现死连接。无需节流，收到即回。
@@ -129,60 +131,13 @@ public class SseController {
      * 解析客户端 IP：优先信任代理头（Nginx 反代下 remoteAddr 只会是网关地址），
      * 取不到再退回 TCP 对端地址。仅供台账展示，不参与任何鉴权判定。
      *
-     * <p>取到的地址统一过一遍 {@link #normalizeIp(String)}：本机（localhost）访问在开了 IPv6 的
-     * 机器上，Tomcat 给的是 {@code 0:0:0:0:0:0:0:1} 而不是 127.0.0.1，直接进台账既认不出来
-     * 也没法按 IP 过滤；双栈环境下常见的 {@code ::ffff:1.2.3.4} 一并归一成点分十进制。
+     * <p>具体解析与归一化逻辑在 {@link IpUtils}，与 nexus-websocket 共用同一套口径：
+     * 同一个网关后面的两个服务，台账里展示的 IP 必须一致，否则排障时会对不上。
      */
     private String resolveClientIp(HttpServletRequest request) {
-        String ip = firstIp(request.getHeader("X-Forwarded-For"));
-        if (!StringUtils.hasText(ip)) {
-            ip = firstIp(request.getHeader("X-Real-IP"));
-        }
-        if (!StringUtils.hasText(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        return normalizeIp(ip);
-    }
-
-    /**
-     * 代理链形如 {@code "client, proxy1, proxy2"}，最左才是真实客户端；
-     * 部分网关拿不到时会填 {@code unknown}，直接跳过继续往右找
-     */
-    private String firstIp(String header) {
-        if (!StringUtils.hasText(header)) {
-            return null;
-        }
-        for (String part : header.split(",")) {
-            String v = part.trim();
-            if (StringUtils.hasText(v) && !"unknown".equalsIgnoreCase(v)) {
-                return v;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * 归一化展示用的 IP：IPv6 环回 → {@code 127.0.0.1}，IPv4 映射的 IPv6 → 点分十进制
-     */
-    private String normalizeIp(String ip) {
-        String v = ip == null ? "" : ip.trim();
-        if (!StringUtils.hasText(v)) {
-            return "-";
-        }
-        // 带方括号的 IPv6（[::1]:8080 这类带端口的写法）
-        if (v.startsWith("[") && v.contains("]")) {
-            v = v.substring(1, v.indexOf(']'));
-        }
-        // IPv4 映射的 IPv6：::ffff:1.2.3.4 → 1.2.3.4（末段是点分十进制，IPv6 分组不会出现点）
-        int lastColon = v.lastIndexOf(':');
-        if (lastColon >= 0 && v.substring(lastColon + 1).indexOf('.') > 0) {
-            v = v.substring(lastColon + 1);
-        }
-        // IPv6 环回（::1 的完整写法是 0:0:0:0:0:0:0:1）→ 统一成 127.0.0.1
-        if ("::1".equals(v) || "0:0:0:0:0:0:0:1".equals(v)) {
-            v = "127.0.0.1";
-        }
-        return v;
+        return IpUtils.resolve(request.getHeader(NexusConstants.HEADER_X_FORWARDED_FOR),
+                request.getHeader(NexusConstants.HEADER_X_REAL_IP),
+                request.getRemoteAddr());
     }
 
     /**

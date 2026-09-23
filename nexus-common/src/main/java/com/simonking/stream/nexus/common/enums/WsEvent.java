@@ -1,4 +1,4 @@
-package com.simonking.nexus.websocket.enums;
+package com.simonking.stream.nexus.common.enums;
 
 /**
  * WebSocket 消息事件类型
@@ -14,6 +14,9 @@ package com.simonking.nexus.websocket.enums;
  *
  * <p>浏览器原生 API 无法收发协议层的 ping/pong 帧（{@code WebSocket} 对象根本不暴露），
  * 所以心跳必须走应用级消息，这也是 {@code PING} / {@code PONG} 存在的唯一理由。
+ *
+ * <p>与 SSE 的 {@link SseEvent} 是两套事件：SSE 走 {@code event:} 行（协议字段），
+ * WebSocket 走消息体里的 {@code event} 字段，两者取值不必对齐，只是都由服务端下发。
  *
  * @author simonking
  */

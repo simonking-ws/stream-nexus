@@ -1,7 +1,7 @@
 package com.simonking.nexus.websocket.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.simonking.nexus.websocket.enums.WsEvent;
+import com.simonking.stream.nexus.common.enums.WsEvent;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

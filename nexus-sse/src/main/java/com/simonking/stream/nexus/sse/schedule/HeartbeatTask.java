@@ -1,7 +1,7 @@
 package com.simonking.stream.nexus.sse.schedule;
 
 import com.simonking.stream.nexus.common.constant.SseConstants;
-import com.simonking.stream.nexus.common.enums.EventEnum;
+import com.simonking.stream.nexus.common.enums.SseEvent;
 import com.simonking.stream.nexus.common.model.SseMessage;
 import com.simonking.stream.nexus.sse.config.SseProperties;
 import com.simonking.stream.nexus.sse.connection.SseClient;
@@ -17,8 +17,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>永不过期策略下，容器不会主动超时，因此这里是连接回收的主战场：
  * <ol>
- *     <li>每 {@code heartbeatInterval} 向每条连接下发一条 {@link EventEnum#PING}，
- *         客户端收到后立即回 {@link EventEnum#PONG}；</li>
+ *     <li>每 {@code heartbeatInterval} 向每条连接下发一条 {@link SseEvent#PING}，
+ *         客户端收到后立即回 {@link SseEvent#PONG}；</li>
  *     <li>{@code now - lastPongTime > heartbeatTimeout} 判定失联并回收。
  *         这是发现「半开连接」的唯一手段——半开连接下 {@code send()} 依然返回成功，
  *         只有客户端应答才能证明它还活着；</li>
@@ -64,7 +64,7 @@ public class HeartbeatTask {
             // 3. 下发心跳：客户端收到后应回 PONG（不设置 id，避免污染客户端的 Last-Event-ID）
             try {
                 sender.send(client, SseMessage.builder()
-                        .event(EventEnum.PING)
+                        .event(SseEvent.PING)
                         .bizModule(SseConstants.SYS_MODULE)
                         .action(SseConstants.ACTION_PING)
                         .ts(now)

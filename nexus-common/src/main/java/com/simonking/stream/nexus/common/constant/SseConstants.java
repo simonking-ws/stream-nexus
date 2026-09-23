@@ -1,6 +1,7 @@
 package com.simonking.stream.nexus.common.constant;
 
-import java.util.UUID;
+import com.simonking.stream.nexus.common.util.IpUtils;
+import com.simonking.stream.nexus.common.util.NexusUtils;
 
 /**
  * SSE 协议层常量
@@ -9,6 +10,10 @@ import java.util.UUID;
  * 一旦散落各处，改名时极易漏改且编译器不会报错。修改此处等价于修改协议，需服务端与客户端同步发布。
  *
  * <p>只收协议级 / 系统级字面量，业务模块名（{@code lot} / {@code order}）由业务方自定义，不在此列。
+ *
+ * <p>两侧取值相同的常量已上提到 {@link NexusConstants}，这里保留同名引用，调用方无需感知。
+ * 本类只放字面量常量，相关行为方法已收进 {@code util} 下的工具类：
+ * 客户端ID 生成与全局模块判定见 {@link NexusUtils}，客户端IP 解析见 {@link IpUtils}。
  *
  * @author simonking
  */
@@ -50,50 +55,24 @@ public final class SseConstants {
      * 它与 {@link #MODULE_WILDCARD} 同形（都是 {@code *}）但**命名空间不同**：
      * 这里出现在「模块名」位置，那里出现在「模块白名单」位置（表示不限模块）。
      */
-    public static final String GLOBAL_MODULE = "*";
+    public static final String GLOBAL_MODULE = NexusConstants.GLOBAL_MODULE;
 
     /**
-     * 生成一个客户端ID：UUID v4（36 字符，形如 {@code 6f1d2a3c-...}）
-     *
-     * <p>由<b>服务端</b>在建连时生成，客户端不需要（也不允许）自带：
-     * 让客户端自带ID 意味着客户端可以声明任意身份，服务端要么承担被冒用的风险，
-     * 要么再叠一层令牌校验；交给服务端生成则没有这些问题。
-     *
-     * <p>UUID 足够长（122 位随机），海量终端并发建连的碰撞概率也可以忽略，
-     * 因此 {@code SseClientRegistry#add} 的「ID 冲突」分支只是理论兜底，正常路径不会走到。
-     *
-     * <p>代价是它<b>随连接生命周期变化</b>（重连即换）：要按用户维度稳定寻址，请用模块订阅
-     * 或在业务系统侧维护「用户 → 当前 clientId」的映射（客户端建连后上报）。
-     *
-     * <p>与 nexus-websocket 的 {@code WsConstants#newClientId()} 同口径。
-     */
-    public static String newClientId() {
-        return UUID.randomUUID().toString();
-    }
-
-    /**
-     * 判断模块名是否为全局模块（忽略大小写，便于订阅侧归一化后与倒排索引对齐）
-     */
-    public static boolean isGlobal(String module) {
-        return module != null && GLOBAL_MODULE.equalsIgnoreCase(module.trim());
-    }
-
-    /**
-     * 系统动作：建连成功通知（{@link com.simonking.stream.nexus.common.enums.EventEnum#MESSAGE}）
+     * 系统动作：建连成功通知（{@link com.simonking.stream.nexus.common.enums.SseEvent#MESSAGE}）
      *
      * <p>客户端收到后必须重新拉取全量业务状态——服务端无快照、无补发。
      */
-    public static final String ACTION_CONNECTED = "connected";
+    public static final String ACTION_CONNECTED = NexusConstants.ACTION_CONNECTED;
 
     /**
-     * 系统动作：心跳探测（{@link com.simonking.stream.nexus.common.enums.EventEnum#PING}）
+     * 系统动作：心跳探测（{@link com.simonking.stream.nexus.common.enums.SseEvent#PING}）
      */
-    public static final String ACTION_PING = "ping";
+    public static final String ACTION_PING = NexusConstants.ACTION_PING;
 
     /**
-     * 系统动作：心跳应答（{@link com.simonking.stream.nexus.common.enums.EventEnum#PONG}）
+     * 系统动作：心跳应答（{@link com.simonking.stream.nexus.common.enums.SseEvent#PONG}）
      */
-    public static final String ACTION_PONG = "pong";
+    public static final String ACTION_PONG = NexusConstants.ACTION_PONG;
 
     /**
      * 推送鉴权请求头：应用标识（{@code X-Sse-AppId}）
@@ -125,7 +104,7 @@ public final class SseConstants {
      * <p>为 {@code EventSource} 这类无法带自定义头的客户端准备的传参通道；
      * 服务端优先读 {@link #HEADER_CONNECT_TOKEN}，读不到再回退到该参数。
      */
-    public static final String PARAM_CONNECT_TOKEN = "token";
+    public static final String PARAM_CONNECT_TOKEN = NexusConstants.PARAM_CONNECT_TOKEN;
 
     /**
      * 鉴权通过后，该密钥允许推送的业务模块写入 {@code HttpServletRequest} 的属性名
@@ -139,5 +118,5 @@ public final class SseConstants {
      * <p>与 {@link #GLOBAL_MODULE} 同形（都是 {@code *}），但只出现在「应用可推送模块白名单」里，
      * 语义是「不限模块」，不是「只能推全局模块」。两者各自判断、互不复用。
      */
-    public static final String MODULE_WILDCARD = "*";
+    public static final String MODULE_WILDCARD = NexusConstants.MODULE_WILDCARD;
 }

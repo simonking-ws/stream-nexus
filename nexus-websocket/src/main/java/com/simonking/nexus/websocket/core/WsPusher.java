@@ -1,13 +1,14 @@
 package com.simonking.nexus.websocket.core;
 
-import com.simonking.nexus.websocket.constant.WsConstants;
-import com.simonking.nexus.websocket.enums.WsEvent;
 import com.simonking.nexus.websocket.model.WsClient;
 import com.simonking.nexus.websocket.model.WsMessage;
 import com.simonking.nexus.websocket.registry.WsClientRegistry;
+import com.simonking.stream.nexus.common.constant.WsConstants;
+import com.simonking.stream.nexus.common.enums.WsEvent;
 import com.simonking.stream.nexus.common.model.PushRequest;
 import com.simonking.stream.nexus.common.model.PushResult;
 import com.simonking.stream.nexus.common.util.IdGenerator;
+import com.simonking.stream.nexus.common.util.NexusUtils;
 import io.netty.channel.ChannelFuture;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import lombok.RequiredArgsConstructor;
@@ -114,7 +115,7 @@ public class WsPusher {
         }
         Map<String, WsClient> result = new LinkedHashMap<>();
         if (byModule) {
-            if (WsConstants.isGlobal(request.getBizModule())) {
+            if (NexusUtils.isGlobal(request.getBizModule())) {
                 for (WsClient client : registry.all()) {
                     result.putIfAbsent(client.getClientId(), client);
                 }

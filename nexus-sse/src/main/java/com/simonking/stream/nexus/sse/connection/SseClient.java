@@ -24,7 +24,7 @@ public class SseClient {
 
     /**
      * 客户端ID（服务端建连时生成，见
-     * {@link com.simonking.stream.nexus.common.constant.SseConstants#newClientId()}）
+     * {@link com.simonking.stream.nexus.common.util.NexusUtils#newClientId()}）
      *
      * <p>随连接生命周期变化：重连即换。定向推送的寻址依据，业务系统需自行维护它与用户的映射。
      */

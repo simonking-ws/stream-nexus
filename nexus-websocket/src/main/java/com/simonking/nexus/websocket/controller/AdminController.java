@@ -3,7 +3,7 @@ package com.simonking.nexus.websocket.controller;
 import com.simonking.nexus.websocket.auth.PushApp;
 import com.simonking.nexus.websocket.auth.PushAppRegistry;
 import com.simonking.nexus.websocket.config.WsProperties;
-import com.simonking.nexus.websocket.constant.WsConstants;
+import com.simonking.stream.nexus.common.constant.WsConstants;
 import com.simonking.nexus.websocket.model.WsClient;
 import com.simonking.nexus.websocket.registry.WsClientRegistry;
 import lombok.RequiredArgsConstructor;

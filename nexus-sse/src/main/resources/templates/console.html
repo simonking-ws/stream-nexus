@@ -140,7 +140,7 @@ let clientId = null;      // 服务端建连回执分配的客户端ID，重连�
 let lastTs = {};      // 按 bizModule:action 记录已处理的最大 ts，用于丢弃乱序消息
 let appList = [];     // 推送应用（appId / apiKey），来自 /sse/admin/apps
 
-// 协议常量：与服务端 SseConstants / EventEnum 一一对应，协议值改动需两端同步
+// 协议常量：与服务端 SseConstants / SseEvent 一一对应，协议值改动需两端同步
 const SYS_MODULE = 'sse';   // 系统消息模块，业务路由不匹配即忽略
 const EVT_MESSAGE = 'MESSAGE';
 const EVT_PING = 'PING';

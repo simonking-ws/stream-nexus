@@ -1,7 +1,7 @@
 package com.simonking.stream.nexus.common.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.simonking.stream.nexus.common.enums.EventEnum;
+import com.simonking.stream.nexus.common.enums.SseEvent;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -47,7 +47,7 @@ public class SseMessage<T> {
     /**
      * 事件类型：MESSAGE（下行业务消息） / PING（下行心跳） / PONG（上行心跳应答）
      */
-    private EventEnum event;
+    private SseEvent event;
 
     /**
      * 业务模块：既是业务标识也是路由键（连接订阅模块、推送按模块命中），如 lot / order

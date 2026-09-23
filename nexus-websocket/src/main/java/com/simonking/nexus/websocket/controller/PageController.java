@@ -1,7 +1,7 @@
 package com.simonking.nexus.websocket.controller;
 
 import com.simonking.nexus.websocket.config.WsProperties;
-import com.simonking.nexus.websocket.constant.WsConstants;
+import com.simonking.stream.nexus.common.constant.WsConstants;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;

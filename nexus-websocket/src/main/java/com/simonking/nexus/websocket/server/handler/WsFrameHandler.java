@@ -1,11 +1,12 @@
 package com.simonking.nexus.websocket.server.handler;
 
 import com.simonking.nexus.websocket.config.WsProperties;
-import com.simonking.nexus.websocket.constant.WsConstants;
-import com.simonking.nexus.websocket.enums.WsEvent;
+import com.simonking.nexus.websocket.constant.WsChannelKeys;
 import com.simonking.nexus.websocket.model.WsClient;
 import com.simonking.nexus.websocket.model.WsMessage;
 import com.simonking.nexus.websocket.registry.WsClientRegistry;
+import com.simonking.stream.nexus.common.constant.WsConstants;
+import com.simonking.stream.nexus.common.enums.WsEvent;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
@@ -114,7 +115,7 @@ public class WsFrameHandler extends SimpleChannelInboundHandler<TextWebSocketFra
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
-        String clientId = ctx.channel().attr(WsConstants.ATTR_CLIENT_ID).get();
+        String clientId = ctx.channel().attr(WsChannelKeys.CLIENT_ID).get();
         if (clientId != null && registry.contains(clientId)) {
             log.info("[ws] 客户端断开连接, clientId={}", clientId);
             registry.remove(clientId);
@@ -124,7 +125,7 @@ public class WsFrameHandler extends SimpleChannelInboundHandler<TextWebSocketFra
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.warn("[ws] 连接异常, clientId={}", ctx.channel().attr(WsConstants.ATTR_CLIENT_ID).get(), cause);
+        log.warn("[ws] 连接异常, clientId={}", ctx.channel().attr(WsChannelKeys.CLIENT_ID).get(), cause);
         ctx.close();
     }
 
@@ -135,9 +136,9 @@ public class WsFrameHandler extends SimpleChannelInboundHandler<TextWebSocketFra
      * 客户端拿它可以自证身份，业务系统拿它做定向推送。
      */
     private void onHandshakeComplete(ChannelHandlerContext ctx, WebSocketServerProtocolHandler.HandshakeComplete complete) {
-        Set<String> modules = ctx.channel().attr(WsConstants.ATTR_MODULES).get();
-        String ip = ctx.channel().attr(WsConstants.ATTR_IP).get();
-        String clientId = ctx.channel().attr(WsConstants.ATTR_CLIENT_ID).get();
+        Set<String> modules = ctx.channel().attr(WsChannelKeys.MODULES).get();
+        String ip = ctx.channel().attr(WsChannelKeys.IP).get();
+        String clientId = ctx.channel().attr(WsChannelKeys.CLIENT_ID).get();
         if (modules == null || clientId == null) {
             ctx.close();
             return;
@@ -166,7 +167,7 @@ public class WsFrameHandler extends SimpleChannelInboundHandler<TextWebSocketFra
     }
 
     private WsClient resolve(ChannelHandlerContext ctx) {
-        String clientId = ctx.channel().attr(WsConstants.ATTR_CLIENT_ID).get();
+        String clientId = ctx.channel().attr(WsChannelKeys.CLIENT_ID).get();
         return clientId == null ? null : registry.get(clientId);
     }
 

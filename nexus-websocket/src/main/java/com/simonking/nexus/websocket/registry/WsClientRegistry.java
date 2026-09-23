@@ -1,7 +1,8 @@
 package com.simonking.nexus.websocket.registry;
 
-import com.simonking.nexus.websocket.constant.WsConstants;
 import com.simonking.nexus.websocket.model.WsClient;
+import com.simonking.stream.nexus.common.constant.WsConstants;
+import com.simonking.stream.nexus.common.util.NexusUtils;
 import io.netty.channel.Channel;
 import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
@@ -22,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>两张表：主表（clientId -> 连接）+ 模块倒排索引（模块 -> clientId 集合）。
  * 推送按模块命中时，倒排索引把 O(n) 全表扫描降为 O(命中数)。
  *
- * <p>主键是<b>客户端ID</b>（{@link WsConstants#newClientId()}）：由客户端自带或服务端兜底生成的
+ * <p>主键是<b>客户端ID</b>（{@link NexusUtils#newClientId()}）：由客户端自带或服务端兜底生成的
  * UUID，与 {@code nexus-sse} 的 {@code clientId} 同一套语义，业务系统可以按它定向推送。
  * 它不随重连变化（前提是客户端自己带着同一个ID来），这是它优于「通道ID」的地方。
  *
@@ -194,7 +195,7 @@ public class WsClientRegistry {
                 if (trimmed.isEmpty()) {
                     continue;
                 }
-                result.add(WsConstants.isGlobal(trimmed) ? WsConstants.GLOBAL_MODULE : trimmed);
+                result.add(NexusUtils.isGlobal(trimmed) ? WsConstants.GLOBAL_MODULE : trimmed);
             }
         }
         if (result.isEmpty()) {

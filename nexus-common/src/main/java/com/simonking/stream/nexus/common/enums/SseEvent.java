@@ -1,7 +1,7 @@
 package com.simonking.stream.nexus.common.enums;
 
 /**
- * 消息事件类型（协议层）
+ * SSE 消息事件类型（协议层）
  *
  * <p>枚举只描述消息在协议中的角色，业务语义一律由 {@code bizModule} + {@code action} 自由表达。
  *
@@ -16,9 +16,12 @@ package com.simonking.stream.nexus.common.enums;
  *     <li>服务端回收：{@code SseEmitter#complete()}</li>
  * </ul>
  *
+ * <p>与 {@link WsEvent} 是两套事件：SSE 走 {@code event:} 行（协议字段），
+ * WebSocket 走消息体里的 {@code event} 字段，两者取值不必对齐，只是都由服务端下发。
+ *
  * @author simonking
  */
-public enum EventEnum {
+public enum SseEvent {
 
     /**
      * 业务消息：服务端 --SSE--> 客户端

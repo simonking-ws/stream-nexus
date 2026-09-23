@@ -1,11 +1,12 @@
 package com.simonking.stream.nexus.sse.core;
 
 import com.simonking.stream.nexus.common.constant.SseConstants;
-import com.simonking.stream.nexus.common.enums.EventEnum;
+import com.simonking.stream.nexus.common.enums.SseEvent;
 import com.simonking.stream.nexus.common.model.PushRequest;
 import com.simonking.stream.nexus.common.model.PushResult;
 import com.simonking.stream.nexus.common.model.SseMessage;
 import com.simonking.stream.nexus.common.util.IdGenerator;
+import com.simonking.stream.nexus.common.util.NexusUtils;
 import com.simonking.stream.nexus.sse.connection.SseClient;
 import com.simonking.stream.nexus.sse.connection.SseClientRegistry;
 import lombok.RequiredArgsConstructor;
@@ -62,7 +63,7 @@ public class SsePusher {
 
         SseMessage<Object> message = SseMessage.builder()
                 .id(IdGenerator.nextId())
-                .event(EventEnum.MESSAGE)
+                .event(SseEvent.MESSAGE)
                 .bizModule(request.getBizModule())
                 .action(request.getAction())
                 .ts(System.currentTimeMillis())
@@ -114,7 +115,7 @@ public class SsePusher {
         Map<String, SseClient> result = new LinkedHashMap<>();
 
         if (byModule) {
-            Collection<SseClient> moduleClients = SseConstants.isGlobal(request.getBizModule())
+            Collection<SseClient> moduleClients = NexusUtils.isGlobal(request.getBizModule())
                     ? registry.all()
                     : registry.byModule(request.getBizModule());
             for (SseClient client : moduleClients) {

@@ -2,8 +2,12 @@ package com.simonking.nexus.websocket.server.handler;
 
 import com.simonking.nexus.websocket.auth.PushAppRegistry;
 import com.simonking.nexus.websocket.config.WsProperties;
-import com.simonking.nexus.websocket.constant.WsConstants;
+import com.simonking.nexus.websocket.constant.WsChannelKeys;
 import com.simonking.nexus.websocket.registry.WsClientRegistry;
+import com.simonking.stream.nexus.common.constant.NexusConstants;
+import com.simonking.stream.nexus.common.constant.WsConstants;
+import com.simonking.stream.nexus.common.util.IpUtils;
+import com.simonking.stream.nexus.common.util.NexusUtils;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -35,7 +39,7 @@ import java.util.Set;
  * <p>校验通过后不消费报文，{@code retain()} 一把再往后传，交给协议处理器完成升级；
  * 同时把客户端ID / 模块 / IP 写进 Channel 属性，供后续的帧处理器登记连接。
  *
- * <p><b>客户端ID 由服务端在这里生成</b>（UUID，见 {@link WsConstants#newClientId()}）：
+ * <p><b>客户端ID 由服务端在这里生成</b>（UUID，见 {@link NexusUtils#newClientId()}）：
  * 终端只需带订阅模块，不用管自己的身份。
  *
  * @author simonking
@@ -71,12 +75,12 @@ public class WsHandshakeHandler extends SimpleChannelInboundHandler<FullHttpRequ
         }
 
         // 3. 客户端ID：服务端生成，客户端无需传递（也无从伪造）
-        ctx.channel().attr(WsConstants.ATTR_CLIENT_ID).set(WsConstants.newClientId());
+        ctx.channel().attr(WsChannelKeys.CLIENT_ID).set(NexusUtils.newClientId());
 
         Set<String> modules = WsClientRegistry.normalizeModules(decoder.parameters().get(WsConstants.PARAM_MODULES));
-        ctx.channel().attr(WsConstants.ATTR_MODULES).set(modules);
-        ctx.channel().attr(WsConstants.ATTR_IP).set(resolveIp(ctx, request));
-        ctx.channel().attr(WsConstants.ATTR_URI).set(request.uri());
+        ctx.channel().attr(WsChannelKeys.MODULES).set(modules);
+        ctx.channel().attr(WsChannelKeys.IP).set(resolveIp(ctx, request));
+        ctx.channel().attr(WsChannelKeys.URI).set(request.uri());
 
         // 不消费报文：交回给 WebSocketServerProtocolHandler 完成握手升级
         ctx.fireChannelRead(ReferenceCountUtil.retain(request));
@@ -91,39 +95,13 @@ public class WsHandshakeHandler extends SimpleChannelInboundHandler<FullHttpRequ
      * 解析客户端 IP：优先信任代理头（Nginx 反代下 TCP 对端地址只会是网关地址），
      * 取不到再退回对端地址。仅供台账展示，不参与任何鉴权判定。
      *
-     * <p>与 nexus-sse 的 {@code SseController#resolveClientIp} 保持同一套口径：
+     * <p>具体解析与归一化逻辑在 {@link IpUtils}，与 nexus-sse 共用同一套口径：
      * 同一个网关后面的两个服务，台账里展示的 IP 必须一致，否则排障时会对不上。
-     *
-     * <p>取到的地址统一过一遍 {@link #normalizeIp(String)}：本机（localhost）访问在开了 IPv6 的
-     * 机器上，对端给的是 {@code 0:0:0:0:0:0:0:1} 而不是 127.0.0.1，直接进台账既认不出来
-     * 也没法按 IP 过滤；双栈环境下常见的 {@code ::ffff:1.2.3.4} 一并归一成点分十进制。
      */
     private String resolveIp(ChannelHandlerContext ctx, FullHttpRequest request) {
-        String ip = firstIp(request.headers().get(WsConstants.HEADER_X_FORWARDED_FOR));
-        if (!StringUtils.hasText(ip)) {
-            ip = firstIp(request.headers().get(WsConstants.HEADER_X_REAL_IP));
-        }
-        if (!StringUtils.hasText(ip)) {
-            ip = remoteIp(ctx);
-        }
-        return normalizeIp(ip);
-    }
-
-    /**
-     * 代理链形如 {@code "client, proxy1, proxy2"}，最左才是真实客户端；
-     * 部分网关拿不到时会填 {@code unknown}，直接跳过继续往右找
-     */
-    private String firstIp(String header) {
-        if (!StringUtils.hasText(header)) {
-            return null;
-        }
-        for (String part : header.split(",")) {
-            String v = part.trim();
-            if (StringUtils.hasText(v) && !"unknown".equalsIgnoreCase(v)) {
-                return v;
-            }
-        }
-        return null;
+        return IpUtils.resolve(request.headers().get(NexusConstants.HEADER_X_FORWARDED_FOR),
+                request.headers().get(NexusConstants.HEADER_X_REAL_IP),
+                remoteIp(ctx));
     }
 
     /**

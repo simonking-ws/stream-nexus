@@ -1,7 +1,7 @@
 package com.simonking.nexus.websocket.auth;
 
 import com.simonking.nexus.websocket.config.WsProperties;
-import com.simonking.nexus.websocket.constant.WsConstants;
+import com.simonking.stream.nexus.common.constant.WsConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
