@@ -1,7 +1,8 @@
 package com.simonking.stream.nexus.sse.core;
 
 import tools.jackson.databind.ObjectMapper;
-import com.simonking.stream.nexus.common.model.SseMessage;
+import com.simonking.stream.nexus.common.enums.SseEvent;
+import com.simonking.stream.nexus.common.model.NexusMessage;
 import com.simonking.stream.nexus.sse.connection.SseClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -29,7 +30,7 @@ public class SseSender {
      *
      * @throws IOException 连接已失效或写入阻塞失败
      */
-    public void send(SseClient client, SseMessage<?> message) throws IOException {
+    public void send(SseClient client, NexusMessage<?, SseEvent> message) throws IOException {
         SseEmitter.SseEventBuilder builder = SseEmitter.event();
         if (message.getId() != null) {
             builder.id(message.getId());

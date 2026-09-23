@@ -26,8 +26,6 @@ public class PushService {
 
     private final WsPusher pusher;
 
-    private final PushAppRegistry appRegistry;
-
     /**
      * 推送消息
      *

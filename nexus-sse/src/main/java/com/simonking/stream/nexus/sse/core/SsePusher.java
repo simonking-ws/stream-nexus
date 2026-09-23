@@ -4,7 +4,7 @@ import com.simonking.stream.nexus.common.constant.NexusConstants;
 import com.simonking.stream.nexus.common.enums.SseEvent;
 import com.simonking.stream.nexus.common.model.PushRequest;
 import com.simonking.stream.nexus.common.model.PushResult;
-import com.simonking.stream.nexus.common.model.SseMessage;
+import com.simonking.stream.nexus.common.model.NexusMessage;
 import com.simonking.stream.nexus.common.util.IdGenerator;
 import com.simonking.stream.nexus.common.util.NexusUtils;
 import com.simonking.stream.nexus.sse.connection.SseClient;
@@ -61,7 +61,7 @@ public class SsePusher {
     public PushResult push(PushRequest request) {
         Collection<SseClient> targets = resolveTargets(request);
 
-        SseMessage<Object> message = SseMessage.builder()
+        NexusMessage<Object, SseEvent> message = NexusMessage.<Object, SseEvent>builder()
                 .id(IdGenerator.nextId())
                 .event(SseEvent.MESSAGE)
                 .bizModule(request.getBizModule())

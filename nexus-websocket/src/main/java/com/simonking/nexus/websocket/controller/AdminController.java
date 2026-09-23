@@ -4,7 +4,9 @@ import com.simonking.nexus.websocket.auth.PushApp;
 import com.simonking.nexus.websocket.auth.PushAppRegistry;
 import com.simonking.nexus.websocket.config.WsProperties;
 import com.simonking.stream.nexus.common.constant.WsConstants;
+import com.simonking.nexus.websocket.model.TcpClient;
 import com.simonking.nexus.websocket.model.WsClient;
+import com.simonking.nexus.websocket.registry.TcpClientRegistry;
 import com.simonking.nexus.websocket.registry.WsClientRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -45,6 +47,8 @@ public class AdminController {
 
     private final WsProperties properties;
 
+    private final TcpClientRegistry tcpRegistry;
+
     /**
      * 全局概览：WebSocket 连接 + 服务运行信息
      */
@@ -69,6 +73,29 @@ public class AdminController {
         result.put("maxConnections", properties.getMaxConnections());
         result.put("wsPort", properties.getWsPort());
         result.put("wsPath", properties.getWsPath());
+        result.put("items", items);
+        return result;
+    }
+
+    /**
+     * TCP 接入连接台账：哪些业务系统正连着、推了多少条
+     *
+     * <p>与终端台账分开：两者数量级差三个数量级，混在一张表里看不清，
+     * 而且「连接数异常增长」的告警含义完全不同（终端涨是正常流量，TCP 涨多半是客户端重连逻辑写错）。
+     */
+    @GetMapping("/tcp/connections")
+    public Map<String, Object> tcpConnections() {
+        long now = System.currentTimeMillis();
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (TcpClient client : tcpRegistry.all()) {
+            items.add(toTcpView(client, now));
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total", tcpRegistry.size());
+        result.put("tcpPort", properties.getTcpPort());
+        result.put("maxConnections", properties.getMaxConnections());
+        result.put("heartbeatInterval", properties.getHeartbeatInterval().toMillis());
+        result.put("heartbeatTimeout", properties.getHeartbeatTimeout().toMillis());
         result.put("items", items);
         return result;
     }
@@ -156,6 +183,21 @@ public class AdminController {
     }
 
     public record AppUpdateRequest(String apiKey, List<String> allowedModules) {
+    }
+
+    private Map<String, Object> toTcpView(TcpClient client, long now) {
+        long silence = Math.max(now - client.getLastPongTime(), 0);
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("channelId", client.getChannelId());
+        view.put("ip", client.getIp() == null ? "-" : client.getIp());
+        view.put("createTime", client.getCreateTime());
+        view.put("lastActiveTime", client.getLastActiveTime());
+        view.put("lastPongTime", client.getLastPongTime());
+        view.put("online", Math.max(now - client.getCreateTime(), 0));
+        view.put("silence", silence);
+        view.put("stale", silence > properties.getHeartbeatTimeout().toMillis());
+        view.put("msgCount", client.getMsgCount().get());
+        return view;
     }
 
     private Map<String, Object> toView(WsClient client, long now, long heartbeatTimeout) {

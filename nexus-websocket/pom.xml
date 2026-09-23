@@ -14,12 +14,6 @@
     <name>nexus-websocket</name>
     <description>nexus-websocket：独立部署的 WebSocket 推送服务（WebSocket 建连 + REST 推送入口）</description>
 
-    <properties>
-        <!-- 显式锁定 Netty 版本：避免 Spring Boot 依赖管理升级到 4.2 后
-             WebSocketServerProtocolHandler.HandshakeComplete 语义变化 -->
-        <netty.version>4.2.18.Final</netty.version>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>com.simonking.stream</groupId>
@@ -34,7 +28,6 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId>
-            <version>${netty.version}</version>
         </dependency>
 
         <dependency>

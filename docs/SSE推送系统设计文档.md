@@ -22,7 +22,7 @@
 | 永不过期 | `new SseEmitter(0L)` + `async.request-timeout=0` | 容器永远不会替你超时，死连接必须自己发现、自己回收 |
 | 无外部中间件 | 不能做全局 ID、不能做消息回放、不能做集群广播 | **只能单节点部署**；断线期间消息不补发 |
 | 独立服务 | 与业务进程分离 | 只有两种寻址手段：按 `bizModule` 广播、按 `clientId` 定向，业务必须自己算好推给谁 |
-| 消息体极简 | `SseMessage` 只有 6 个字段 | 无独立路由字段，`bizModule` 兼任路由键；同模块内多业务流靠 `data` 自带归属 ID 区分 |
+| 消息体极简 | `NexusMessage` 只有 6 个字段 | 无独立路由字段，`bizModule` 兼任路由键；同模块内多业务流靠 `data` 自带归属 ID 区分 |
 
 ---
 
@@ -50,7 +50,7 @@
 
 | 类 | 包 | 职责 |
 | --- | --- | --- |
-| `SseMessage` / `SseEvent` / `PushRequest` / `PushResult` | `common` | 跨模块契约，业务系统也依赖它 |
+| `NexusMessage` / `SseEvent` / `PushRequest` / `PushResult` | `common` | 跨模块契约，业务系统也依赖它 |
 | `SseConstants` | `common.constant` | 协议层字符串常量（`SYS_MODULE` / `ACTION_*` / 鉴权头 / 通配符） |
 | `IdGenerator` | `common.util` | 单调递增消息 ID（CAS 实现） |
 | `SseProperties` | `sse.config` | 全部可调参数 |
@@ -68,7 +68,9 @@
 
 ## 3. 数据契约
 
-### 3.1 `SseMessage<T>`（双向复用）
+### 3.1 `NexusMessage<T, E>`（双向复用，WebSocket 共用同一份）
+
+> `E` 是事件类型：SSE 传 `SseEvent`，WebSocket 传 `WsEvent`。两个协议字段结构一致，只有事件取值集合不同。
 
 ```java
 { "id": "1758...", "event": "MESSAGE", "bizModule": "lot", "action": "bid", "ts": 1758..., "data": {...} }
@@ -189,7 +191,7 @@ long next = Math.max(System.currentTimeMillis(), prev + 1);  // CAS
                 continue;
             }
             try {
-                sender.send(client, SseMessage.builder()
+                sender.send(client, NexusMessage.builder()
                         .event(SseEvent.PING)             // 判据3：下发心跳，等客户端回 PONG
                         ...build());
             } catch (Exception e) {
@@ -429,7 +431,7 @@ SSE 自带 `Last-Event-ID` 补发能力，但补发需要服务端缓存消息�
 
 ### E11：Jackson 3 包名
 
-Spring Boot 4 使用 Jackson 3，`SseSender` 注入的是 `tools.jackson.databind.ObjectMapper`（不是 `com.fasterxml.jackson`）。**写成 `com.fasterxml.jackson.databind.ObjectMapper` 会导致注入失败或序列化行为不一致**（例如 `SseMessage` 上 `@JsonInclude` 注解若引错包会静默失效）。
+Spring Boot 4 使用 Jackson 3，`SseSender` 注入的是 `tools.jackson.databind.ObjectMapper`（不是 `com.fasterxml.jackson`）。**写成 `com.fasterxml.jackson.databind.ObjectMapper` 会导致注入失败或序列化行为不一致**（例如 `NexusMessage` 上 `@JsonInclude` 注解若引错包会静默失效）。
 
 ### E12：反向代理会吃掉 SSE
 

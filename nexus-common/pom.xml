@@ -13,13 +13,15 @@
     <version>1.0.0</version>
     <name>nexus-common</name>
     <description>nexus-common</description>
-    <properties>
-        <java.version>17</java.version>
-    </properties>
+
     <dependencies>
+        <!-- 只有 IpUtils / NexusUtils 用到 spring-core 的 StringUtils。
+             标 optional：让只复用「常量 + 模型」的客户端 SDK 不要把整条 Spring 打进自己的依赖树。
+             服务端模块（nexus-sse / nexus-websocket）本来就有 spring，不受影响。 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
+            <optional>true</optional>
         </dependency>
 
 

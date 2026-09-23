@@ -3,7 +3,7 @@ package com.simonking.stream.nexus.sse.controller;
 import com.simonking.stream.nexus.common.constant.NexusConstants;
 import com.simonking.stream.nexus.common.constant.SseConstants;
 import com.simonking.stream.nexus.common.enums.SseEvent;
-import com.simonking.stream.nexus.common.model.SseMessage;
+import com.simonking.stream.nexus.common.model.NexusMessage;
 import com.simonking.stream.nexus.common.util.IdGenerator;
 import com.simonking.stream.nexus.common.util.IpUtils;
 import com.simonking.stream.nexus.common.util.NexusUtils;
@@ -91,7 +91,7 @@ public class SseController {
 
         // 首条消息：告知客户端心跳节奏（客户端收到后应重新拉取全量业务状态）
         try {
-            sender.send(client, SseMessage.builder()
+            sender.send(client, NexusMessage.<Object, SseEvent>builder()
                     .id(IdGenerator.nextId())
                     .event(SseEvent.MESSAGE)
                     .bizModule(SseConstants.SYS_MODULE)
@@ -117,7 +117,7 @@ public class SseController {
      */
     @PostMapping("/sse/pong")
     public Map<String, Object> pong(@RequestParam(SseConstants.PARAM_CLIENT_ID) String clientId,
-                                    @RequestBody(required = false) SseMessage<Object> message) {
+                                    @RequestBody(required = false) NexusMessage<Object, SseEvent> message) {
         SseClient client = registry.get(clientId);
         boolean ok = false;
         if (client != null) {

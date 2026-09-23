@@ -7,7 +7,7 @@
 | 通道 | 模块 | 终端接入 | 业务系统接入 | 端口 |
 | --- | --- | --- | --- | --- |
 | SSE | `nexus-sse` | 原生 `EventSource` | HTTP `POST /sse/push` | 8088 |
-| WebSocket | `nexus-websocket` | 原生 `WebSocket` | HTTP `POST /ws/push`（`nexus-websocket-client` SDK） | 9090 / 8089 |
+| WebSocket | `nexus-websocket` | 原生 `WebSocket` | HTTP `POST /ws/push`，或 TCP 长连接（默认 9091） | 9090 / 8089 / 9091 |
 
 - 技术栈：Spring Boot 4.1.1 / Java 17 / Spring MVC（`spring-boot-starter-webmvc`）+ Netty 4.2
 - 模块：`nexus-common`（跨模块契约） + `nexus-sse`（SSE 推送服务） + `nexus-websocket`（WebSocket 推送服务） + `nexus-websocket-client`（独立客户端 SDK）
@@ -35,7 +35,7 @@
 1. **零中间件**：连接表与消息 ID 全在内存，不需要 Redis / MQ，单机 `java -jar` 即可跑，接入成本极低。
 2. **永不过期 + 主动探测**：`SseEmitter(0L)` 让容器不再替你超时，配合 PING/PONG 一问一答解决 TCP 半开连接（进程被杀、笔记本合盖、NAT 静默丢表）下 `send()` 仍返回成功、死连接几小时都发现不了的难题。
 3. **统一回收入口**：所有回收路径只走 `SseClientRegistry.remove()`，保证连接主表与模块倒排索引一致，杜绝索引泄漏与内存缓慢增长。
-4. **极简消息体**：`SseMessage` 固定 6 个字段。协议层字段用枚举保证稳定，业务层字段（`bizModule` / `action`）用字符串，业务方新增维度无需改公共包、无需改枚举。
+4. **极简消息体**：`NexusMessage` 固定 6 个字段。协议层字段用枚举保证稳定，业务层字段（`bizModule` / `action`）用字符串，业务方新增维度无需改公共包、无需改枚举。
 5. **契约与实现分离**：`nexus-common` 只放契约（消息体、枚举、常量、推送入参出参），业务系统可单独依赖它，不必引入服务端实现。
 6. **精细的推送鉴权**：`X-Sse-AppId` 定位应用、`X-Sse-Key` 证明身份，二者必须配对；每个应用可配 `allowed-modules` 白名单，越权推其他模块返回 403。
 7. **连接复用**：一条 SSE 连接可订阅多个 `bizModule`，规避浏览器同域 HTTP/1.1 的 6 连接上限。
@@ -128,7 +128,7 @@ registry.addMapping("/**")
 
 ## 四、消息协议
 
-下行消息体（`SseMessage`）：
+下行消息体（`NexusMessage`，SSE 与 WebSocket 共用同一份定义）：
 
 ```json
 {
@@ -337,15 +337,52 @@ WebSocket 是「全双工、可上行、适合高频交互」。两者**协议�
    浏览器 / H5 / App
           │  ws://host:9090/ws?modules=test   （只带订阅模块）
           ▼
-   nexus-websocket（独立部署，一个进程两组端口）
+   nexus-websocket（独立部署，一个进程三组端口）
      ├── 9090  Netty WebSocket —— 终端长连接
+     ├── 9091  Netty TCP       —— 业务系统长连接（连上即可推，只对内网开放）
      └── 8089  HTTP            —— REST 推送入口 / 管理界面 / 测试页 / 运维接口
           ▲
-          │  HTTP POST /ws/push（只负责推消息）
+          │  HTTP POST /ws/push（短连接）或 TCP 长连接（9091）
    业务系统 ← nexus-websocket-client（或直接 HTTP 调用）
 ```
 
-Netty 与 Spring MVC 在**同一进程内共享连接注册表**：REST 收到推送 → 查注册表 → 直接写 WebSocket 通道。
+Netty 与 Spring MVC 在**同一进程内共享连接注册表**：REST / TCP 收到推送 → 查注册表 → 直接写 WebSocket 通道。
+
+### TCP 接入通道（9091）
+
+REST 推送是短连接，高频推送时每条消息都要重建 HTTP 连接、重走一次鉴权；
+TCP 通道让业务系统**一条长连接一直推**，还能靠心跳提前发现链路中断。
+两条链共用同一个 `WsPusher` 与同一套参数校验，只是报文换了个载体。
+
+- **不做应用鉴权**：连接建立即可推送。TCP 端口与 REST 接口一样只对内网开放，
+  「端口不暴露」就是它的边界；业务系统推的消息仍要按终端的订阅模块扇出，拿不到额外能力，
+  再叠一层 appId / apiKey 只是多一套要分发、轮换、排查的凭据。
+- **帧格式**：`[4 字节大端长度][UTF-8 JSON]`。不用分隔符切帧是因为报文体是 JSON，
+  业务 `data` 里出现同字符就会把一个报文切成两半，且只在特定数据下偶发，极难复现。
+- **报文体**：复用 `NexusMessage`，`event` 取 `TcpEvent`（`PUSH` / `RESULT` / `PING` / `PONG` / `ERROR`）。
+
+```json
+{"event":"PUSH","data":{"bizModule":"test","action":"bid","data":{"itemId":"L123"}}}
+```
+
+```json
+{"event":"RESULT","bizModule":"tcp","action":"result","ts":...,"data":{"messageId":"...","total":1,"success":1,"failed":0}}
+```
+
+规则：`bizModule` / `clientIds` 都为空等参数问题只回 `ERROR`、不关连接，改完报文可以接着推；
+心跳沿用 `nexus.ws.*`（写空闲 15s 服务端发 `PING`，读空闲 90s 未收到任何上行数据即判定失联并关闭）。
+
+台账接口：`GET /ws/admin/tcp/connections`（哪些业务系统连着、推了多少条）。
+
+业务系统侧不用自己写 Netty：`nexus-websocket-client` 里的 `NexusTcpClient` 已封装好
+（Netty 实现，与服务端同一套编解码器；自带心跳、断线重连；推送不等回执，写完即返回；
+SDK 按 Java 8 编译，老系统可直接引入）：
+
+```java
+try (NexusTcpClient client = NexusTcpClient.builder().host("10.0.0.8").port(9091).build()) {
+    client.push(PushRequest.builder().bizModule("order").action("CREATE").data(data).build());
+}
+```
 
 ### 连接的唯一标识：客户端ID
 
@@ -372,7 +409,7 @@ java -jar nexus-websocket/target/nexus-websocket-1.0.0.jar
 
 1. <http://localhost:8089/admin> 连接管理页（默认页）：在线连接台账、模块分布、强制下线、推送应用管理
 2. <http://localhost:8089/console> 推送测试页：建连 → 应答心跳 → 推送 → 看日志
-3. 业务系统引入 `nexus-websocket-client` 后运行 `PushDemo` 的 `main`，即可看到消息落到页面
+3. 业务系统引入 `nexus-websocket-client` 后运行 `TcpPushDemo` 的 `main`（长连接通道，无需鉴权），即可看到消息落到页面
 
 ### REST 推送接口
 
@@ -408,7 +445,8 @@ curl -X POST http://localhost:8089/ws/push \
 | `server.port` | `8089` | REST 推送 / 管理界面端口，应对公网只暴露 WS，REST 只对内网开放 |
 | `heartbeat-interval` / `heartbeat-timeout` | `15s` / `90s` | WS 心跳间隔与失联阈值 |
 | `max-connections` | `30000` | 最大 WS 连接数，0 = 不限 |
-| `auth-enabled` | `true` | 推送鉴权（`X-Ws-AppId` + `X-Ws-Key`） |
+| `tcp-port` | `9091` | TCP 接入端口（业务系统长连接）；**除端口外无独立配置**，心跳 / 单帧上限 / 连接上限 / 线程数全部沿用本表 |
+| `auth-enabled` | `true` | 推送鉴权（`X-Ws-AppId` + `X-Ws-Key`），**只作用于 REST 推送，TCP 通道不鉴权** |
 | `connect-auth-enabled` / `connect-auth-token` | `false` / - | 建连鉴权（查询参数 `token`） |
 
 ## 十一、目录结构
@@ -423,11 +461,13 @@ stream-nexus
 │       ├── constant/
 │       │   ├── NexusConstants.java          # SSE / WS 取值相同的常量（全局模块、白名单通配、建连令牌、系统动作、代理头）
 │       │   ├── SseConstants.java            # SSE 协议常量（鉴权头、系统模块）
-│       │   └── WsConstants.java             # WS 协议常量（鉴权头、系统模块、关闭码）
+│       │   ├── WsConstants.java             # WS 协议常量（鉴权头、系统模块、关闭码）
+│       │   └── TcpConstants.java            # TCP 协议常量（帧格式、鉴权字段名、系统动作）
 │       ├── enums/
 │       │   ├── SseEvent.java                # MESSAGE / PING / PONG
-│       │   └── WsEvent.java                 # CONNECTED / MESSAGE / PING / PONG / KICKED
-│       ├── model/                           # SseMessage / PushRequest / PushResult
+│       │   ├── WsEvent.java                 # CONNECTED / MESSAGE / PING / PONG / KICKED
+│       │   └── TcpEvent.java                # AUTH / AUTH_OK / AUTH_FAIL / PUSH / RESULT / PING / PONG / ERROR
+│       ├── model/                           # NexusMessage / PushRequest / PushResult
 │       └── util/
 │           ├── IdGenerator.java             # 单调递增消息 ID（CAS）
 │           ├── IpUtils.java                 # 客户端 IP 解析（代理链 + IPv6 归一）
@@ -454,19 +494,23 @@ stream-nexus
             ├── admin.html                       # 连接管理页（默认页：在线台账 / 强制下线）
             ├── console.html                     # 推送测试页（建连 / 推送 / 鉴权验证）
             └── login.html                       # 登录页
-├── nexus-websocket/            # WebSocket 推送服务（Netty + Spring MVC，端口 9090 / 8089）
+├── nexus-websocket/            # WebSocket 推送服务（Netty + Spring MVC，端口 9090 / 8089 / 9091）
 │   └── src/main/java/com/simonking/nexus/websocket
-│       ├── NettyServerRunner.java              # Netty 服务独立线程启动
+│       ├── NettyServerRunner.java              # Netty 服务独立线程启动（WS + TCP 各占一线程）
 │       ├── server/
 │       │   ├── WebSocketNettyServer.java       # 9090：终端建连（握手校验 → 协议升级 → 心跳 → 业务）
-│       │   └── handler/                        # WsHandshakeHandler / WsFrameHandler
-│       ├── registry/WsClientRegistry.java      # 连接主表 + 模块倒排 + 统一回收
-│       ├── core/                               # WsPusher（寻址 + 扇出）/ PushService（推送校验）
+│       │   ├── TcpNettyServer.java             # 9091：业务系统接入（长度帧 → 字符串 → 心跳 → 业务）
+│       │   └── handler/                        # WsHandshakeHandler / WsFrameHandler / TcpFrameHandler
+│       ├── registry/WsClientRegistry.java      # 终端连接主表 + 模块倒排 + 统一回收
+│       ├── registry/TcpClientRegistry.java     # 业务系统接入连接表
+│       ├── core/                               # WsPusher（寻址 + 扇出）/ PushService（REST 校验）/ TcpPushService（TCP 校验）
 │       └── controller/                         # 页面跳转 / REST 推送 / 运维接口
-└── nexus-websocket-client/     # 独立客户端 SDK（无父 POM、不依赖任何 nexus-* 模块）
+└── nexus-websocket-client/     # 客户端 SDK（继承父 POM 编译，按 Java 8 出包）
     ├── README.md                               # 接入文档
     └── src/main/java/com/simonking/nexus/ws/client
-        ├── NexusWsClient.java                  # 推送（同步 / 异步），基于 JDK HttpClient
-        ├── ClientOptions.java                  # 全部参数（Builder）
-        └── model/                              # PushRequest / PushResult（独立定义）
+        ├── tcp/NexusTcpClient.java             # 客户端本体：Lombok builder 拼参数，push() 直接推
+        ├── tcp/TcpClientHandler.java           # 回收执 / 答应心跳 / 发现链路断开
+        └── exception/PushException.java
+        # 协议定义一行都不自己写：事件 / 报文体 / 入参 / 回执全部复用 nexus-common
+        # （所以 common 按 Java 8 出包，且其 spring 依赖为 optional）
 ```

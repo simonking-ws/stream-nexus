@@ -4,10 +4,10 @@ import com.simonking.nexus.websocket.config.WsProperties;
 import com.simonking.nexus.websocket.constant.WsChannelKeys;
 import com.simonking.stream.nexus.common.constant.NexusConstants;
 import com.simonking.nexus.websocket.model.WsClient;
-import com.simonking.nexus.websocket.model.WsMessage;
 import com.simonking.nexus.websocket.registry.WsClientRegistry;
 import com.simonking.stream.nexus.common.constant.WsConstants;
 import com.simonking.stream.nexus.common.enums.WsEvent;
+import com.simonking.stream.nexus.common.model.NexusMessage;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
@@ -17,6 +17,7 @@ import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.LinkedHashMap;
@@ -56,7 +57,7 @@ public class WsFrameHandler extends SimpleChannelInboundHandler<TextWebSocketFra
         if (evt instanceof IdleStateEvent idle) {
             WsClient client = resolve(ctx);
             if (idle.state() == IdleState.WRITER_IDLE && client != null) {
-                write(client, WsMessage.builder()
+                write(client, NexusMessage.<Object, WsEvent>builder()
                         .event(WsEvent.PING)
                         .bizModule(WsConstants.SYS_MODULE)
                         .action(NexusConstants.ACTION_PING)
@@ -82,9 +83,11 @@ public class WsFrameHandler extends SimpleChannelInboundHandler<TextWebSocketFra
         client.setLastActiveTime(now);
         client.getUplinkCount().incrementAndGet();
 
-        WsMessage<?> message;
+        NexusMessage<Object, WsEvent> message;
         try {
-            message = jsonMapper.readValue(frame.text(), WsMessage.class);
+            // 必须带出泛型实参：消息体的 event 是泛型字段，按原始类型反序列化只会得到字符串，
+            // 后面与 WsEvent 常量做 == 比较会永远不成立（且编译器看不出来）
+            message = jsonMapper.readValue(frame.text(), new TypeReference<NexusMessage<Object, WsEvent>>() {});
         } catch (Exception e) {
             log.warn("[ws] 上行报文解析失败, clientId={}, text={}", client.getClientId(), frame.text(), e);
             return;
@@ -105,7 +108,7 @@ public class WsFrameHandler extends SimpleChannelInboundHandler<TextWebSocketFra
         echo.put("bizModule", message.getBizModule());
         echo.put("action", message.getAction());
         echo.put("data", message.getData());
-        write(client, WsMessage.builder()
+        write(client, NexusMessage.<Object, WsEvent>builder()
                 .event(WsEvent.MESSAGE)
                 .bizModule(WsConstants.SYS_MODULE)
                 .action(WsConstants.ACTION_ECHO)
@@ -114,7 +117,11 @@ public class WsFrameHandler extends SimpleChannelInboundHandler<TextWebSocketFra
                 .build());
     }
 
+    /**
+     * 连接断开：从注册表里移除
+     */
     @Override
+
     public void channelInactive(ChannelHandlerContext ctx) {
         String clientId = ctx.channel().attr(WsChannelKeys.CLIENT_ID).get();
         if (clientId != null && registry.contains(clientId)) {
@@ -158,7 +165,7 @@ public class WsFrameHandler extends SimpleChannelInboundHandler<TextWebSocketFra
         data.put("clientId", clientId);
         data.put("modules", modules);
         data.put("heartbeatInterval", properties.getHeartbeatInterval().toMillis());
-        write(client, WsMessage.builder()
+        write(client, NexusMessage.<Object, WsEvent>builder()
                 .event(WsEvent.CONNECTED)
                 .bizModule(WsConstants.SYS_MODULE)
                 .action(NexusConstants.ACTION_CONNECTED)
@@ -172,7 +179,7 @@ public class WsFrameHandler extends SimpleChannelInboundHandler<TextWebSocketFra
         return clientId == null ? null : registry.get(clientId);
     }
 
-    private void write(WsClient client, WsMessage<?> message) {
+    private void write(WsClient client, NexusMessage<?, WsEvent> message) {
         try {
             client.getChannel().writeAndFlush(new TextWebSocketFrame(jsonMapper.writeValueAsString(message)));
             client.getDownlinkCount().incrementAndGet();

@@ -3,48 +3,70 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <!-- 编译完全交给父 POM（spring-boot-starter-parent -> stream-nexus）：
+         插件版本、Java 目标版本、依赖版本都不在本模块里另写一套 -->
+    <parent>
+        <groupId>com.simonking.stream</groupId>
+        <artifactId>stream-nexus</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
     <groupId>com.simonking.nexus</groupId>
     <artifactId>nexus-websocket-client</artifactId>
     <version>1.0.0</version>
-    <packaging>jar</packaging>
     <name>nexus-websocket-client</name>
     <description>
-        nexus-websocket 的独立客户端：基于 JDK HttpClient 的 REST 推送 SDK（无 Netty 依赖）。
-        刻意不继承 stream-nexus 父 POM、不依赖任何 nexus-* 模块，业务项目引入它即可推送消息，
-        无需编写任何 Netty / WebSocket 服务端代码。
+        nexus-websocket 的 TCP 长连接推送客户端：builder 拼参数，之后直接调 push() 推消息，
+        由服务端扇出到 WebSocket 终端。运行期只依赖 netty / jackson / slf4j，无需编写 Netty / WebSocket 代码。
     </description>
 
     <properties>
-        <maven.compiler.release>17</maven.compiler.release>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <jackson.version>2.18.2</jackson.version>
-        <slf4j.version>2.0.13</slf4j.version>
+        <!-- 唯一一处覆盖父 POM 的编译属性：这是给别的业务系统引入的 SDK，
+             按 Java 8 出包老系统才能直接用（代码也一直按 Java 8 语法写）。
+             想跟随父 POM 用 17，删掉这一行即可 -->
+        <java.version>8</java.version>
     </properties>
 
     <dependencies>
+        <!-- 版本均由父 POM（spring-boot-starter-parent 的 dependencyManagement + 本项目）统一管理 -->
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-all</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
 
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>${slf4j.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>com.simonking.stream</groupId>
+            <artifactId>nexus-common</artifactId>
+            <optional>true</optional>
+        </dependency>
+
     </dependencies>
 
     <build>
         <plugins>
-            <!-- 本模块没有父 POM，Maven 3.8 默认绑定的 compiler 插件版本过低（3.1，不认识 release 参数），
-                 这里显式指定版本，保证与服务端一样按 Java 17 编译 -->
+            <!-- 本模块是对外 SDK，不是可执行 jar；跳过继承自父 POM 的 repackage -->
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <release>${maven.compiler.release}</release>
+                    <skip>true</skip>
                 </configuration>
             </plugin>
         </plugins>

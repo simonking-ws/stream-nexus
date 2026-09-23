@@ -3,7 +3,7 @@ package com.simonking.stream.nexus.sse.schedule;
 import com.simonking.stream.nexus.common.constant.NexusConstants;
 import com.simonking.stream.nexus.common.constant.SseConstants;
 import com.simonking.stream.nexus.common.enums.SseEvent;
-import com.simonking.stream.nexus.common.model.SseMessage;
+import com.simonking.stream.nexus.common.model.NexusMessage;
 import com.simonking.stream.nexus.sse.config.SseProperties;
 import com.simonking.stream.nexus.sse.connection.SseClient;
 import com.simonking.stream.nexus.sse.connection.SseClientRegistry;
@@ -64,7 +64,7 @@ public class HeartbeatTask {
             }
             // 3. 下发心跳：客户端收到后应回 PONG（不设置 id，避免污染客户端的 Last-Event-ID）
             try {
-                sender.send(client, SseMessage.builder()
+                sender.send(client, NexusMessage.<Object, SseEvent>builder()
                         .event(SseEvent.PING)
                         .bizModule(SseConstants.SYS_MODULE)
                         .action(NexusConstants.ACTION_PING)

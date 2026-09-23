@@ -1,10 +1,10 @@
 package com.simonking.nexus.websocket.core;
 
 import com.simonking.nexus.websocket.model.WsClient;
-import com.simonking.nexus.websocket.model.WsMessage;
 import com.simonking.nexus.websocket.registry.WsClientRegistry;
 import com.simonking.stream.nexus.common.constant.NexusConstants;
 import com.simonking.stream.nexus.common.enums.WsEvent;
+import com.simonking.stream.nexus.common.model.NexusMessage;
 import com.simonking.stream.nexus.common.model.PushRequest;
 import com.simonking.stream.nexus.common.model.PushResult;
 import com.simonking.stream.nexus.common.util.IdGenerator;
@@ -60,7 +60,7 @@ public class WsPusher {
             return PushResult.builder().messageId(messageId).total(0).success(0).failed(0).build();
         }
 
-        WsMessage<Object> message = WsMessage.builder()
+        NexusMessage<Object, WsEvent> message = NexusMessage.<Object, WsEvent>builder()
                 .id(messageId)
                 .event(WsEvent.MESSAGE)
                 .bizModule(request.getBizModule())
