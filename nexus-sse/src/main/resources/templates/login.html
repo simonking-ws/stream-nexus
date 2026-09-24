@@ -6,6 +6,22 @@
     <title th:text="${title}">登录 · Stream Nexus</title>
     <meta name="color-scheme" content="dark">
     <link rel="stylesheet" th:href="@{/css/nexus-tech.css}">
+    <script>
+        /* 主题必须在渲染前落地：nexus-tech.js 在 body 末尾，等它跑会先闪一帧深色。
+           这里只做「读取 + 打属性」，不碰 DOM 其余部分；按钮由 nexus-tech.js 挂载 */
+        (function () {
+            try {
+                // 默认深色（本项目的视觉基线），只有手动切换过才记在 localStorage
+                var t = localStorage.getItem('nexus-theme');
+                if (t !== 'light' && t !== 'dark') t = 'dark';
+                document.documentElement.setAttribute('data-theme', t);
+                var m = document.querySelector('meta[name="color-scheme"]');
+                if (m) m.setAttribute('content', t === 'light' ? 'light' : 'dark');
+            } catch (e) {
+                // 存储不可用时保持默认深色，不影响后续使用
+            }
+        })();
+    </script>
     <style>
         /* 登录页私有补充：公共科技感主题（深色 / 霓虹 / 动效）见 /css/nexus-tech.css */
 
@@ -82,6 +98,33 @@
             font-size: 12px;
         }
         .login-tip { margin: 14px 0 0; font-size: 11px; }
+
+        /* 亮色主题下的登录页：本页私有样式是照深色配的（压暗遮罩 + 近实色深卡），
+           公共变量覆盖不到，只能按主题整条重写 */
+        [data-theme="light"] .login-veil {
+            background: radial-gradient(ellipse at 50% 40%,
+                    rgba(255, 255, 255, .5) 0%,
+                    rgba(241, 245, 249, .86) 55%,
+                    rgba(226, 232, 240, .95) 100%);
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
+        }
+
+        [data-theme="light"] .login-card {
+            background: linear-gradient(180deg, #ffffff, #f8fafc);
+            border-color: rgba(8, 145, 178, .35);
+            box-shadow:
+                    0 0 0 1px rgba(8, 145, 178, .08),
+                    0 26px 60px -24px rgba(15, 23, 42, .38);
+        }
+
+        [data-theme="light"] .login-card input[type=text],
+        [data-theme="light"] input[type=password] {
+            background: #fff;
+            border-color: rgba(15, 23, 42, .18);
+        }
+
+        [data-theme="light"] input[type=password]:focus { background: #fff; }
     </style>
 </head>
 <body>

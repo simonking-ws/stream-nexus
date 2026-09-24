@@ -77,10 +77,21 @@ public class NexusRestClient implements AutoCloseable {
     /** 默认 WebSocket 服务地址：本机起的 nexus-websocket，端口取自 {@link WsConstants#HTTP_PORT} */
     private static final String DEFAULT_WS_BASE_URL = "http://127.0.0.1:" + WsConstants.HTTP_PORT;
 
-    /** 两个服务各自内置的默认应用（见各自的 {@code PushAppRegistry}）：开箱即用，生产环境务必换成下发的应用 */
-    private static final String DEFAULT_APP_ID = "test";
+    /**
+     * nexus-sse 内置默认应用（见其 {@code PushAppRegistry}）：开箱即用，生产环境务必换成管理页下发的应用。
+     *
+     * <p>白名单只有 {@code test} 模块，推别的 bizModule 会被鉴权拦下——这是默认应用的刻意限制。
+     */
+    private static final String DEFAULT_SSE_APP_ID = "test-demo";
 
-    private static final String DEFAULT_API_KEY = "test_secret";
+    private static final String DEFAULT_SSE_API_KEY = "c3RyZWFtLW5leHVz";
+
+    /**
+     * nexus-websocket 内置默认应用（见其 {@code PushAppRegistry}）：与 SSE 侧是两套独立注册表
+     */
+    private static final String DEFAULT_WS_APP_ID = "test";
+
+    private static final String DEFAULT_WS_API_KEY = "test_secret";
 
     /** 错误响应体在异常消息里最多保留这么长：网关的错误页动辄几十 KB，不该整页灌进日志 */
     private static final int MAX_ERROR_BODY_LENGTH = 512;
@@ -99,11 +110,11 @@ public class NexusRestClient implements AutoCloseable {
 
     /** SSE 推送应用ID：由 nexus-sse 管理界面「推送应用」页签下发 */
     @Builder.Default
-    private String sseAppId = DEFAULT_APP_ID;
+    private String sseAppId = DEFAULT_SSE_APP_ID;
 
     /** SSE 推送应用密钥，与 {@code sseAppId} 配对 */
     @Builder.Default
-    private String sseApiKey = DEFAULT_API_KEY;
+    private String sseApiKey = DEFAULT_SSE_API_KEY;
 
     /**
      * WebSocket 服务根地址，如 {@code http://10.0.0.8:8089}（{@code nexus-websocket} 的 {@code server.port}）
@@ -115,11 +126,11 @@ public class NexusRestClient implements AutoCloseable {
 
     /** WebSocket 推送应用ID：由 nexus-websocket 管理界面「推送应用」页签下发 */
     @Builder.Default
-    private String wsAppId = DEFAULT_APP_ID;
+    private String wsAppId = DEFAULT_WS_APP_ID;
 
     /** WebSocket 推送应用密钥，与 {@code wsAppId} 配对 */
     @Builder.Default
-    private String wsApiKey = DEFAULT_API_KEY;
+    private String wsApiKey = DEFAULT_WS_API_KEY;
 
     // ==================================================================================
     // 运行期状态：final + 就地初始化，@Builder 不会把它们塞进 builder

@@ -58,7 +58,8 @@
 | `SseClientRegistry` | `sse.connection` | 连接主表 + 业务模块倒排索引 + **统一回收** |
 | `SseSender` / `SsePusher` | `sse.core` | 单条写入 / 按模块或 clientId 扇出 |
 | `HeartbeatTask` | `sse.schedule` | 心跳 + 回收（永不过期下的主战场） |
-| `PushAppRegistry` / `PushApp` | `sse.auth` | 推送应用运行时注册表：内置默认应用 `test` / `test_secret`，支持内存增删 |
+| `PushAppRegistry` / `PushApp` | `sse.auth` | 推送应用运行时注册表：内置默认应用 `test-demo` / `c3RyZWFtLW5leHVz`（只读凭证），其余应用支持运行时增删 |
+| `PushAppStore` | `sse.auth` | 推送应用台账持久化：本地 JSON 文件（`nexus.sse.app-store-path`），重启后读回 |
 | `PushAuthInterceptor` | `sse.auth` | 推送鉴权 + 业务模块白名单（读 `PushAppRegistry`） |
 | `SseController` / `PushController` / `AdminController` | `sse.controller` | 订阅/心跳应答、推送、运维 |
 | `PageController` | `sse.controller` | Thymeleaf 页面跳转：`/` → `/admin`（默认）、`/console` |
@@ -244,7 +245,7 @@ long next = Math.max(System.currentTimeMillis(), prev + 1);  // CAS
 ### 4.4 推送与鉴权
 
 - `POST /sse/push`，`PushAuthInterceptor` 拦 `/sse/push/**`，校验 `X-Sse-AppId`（应用标识）+ `X-Sse-Key`（应用密钥），二者必须配对匹配（`MessageDigest.isEqual` 常量时间比对防时序侧信道）；`X-Sse-AppId` 决定**应用**，`X-Sse-Key` 证明**身份**；
-- 凭证不来自配置文件，而是运行时注册表 `PushAppRegistry`：内置默认应用 `test` / `test_secret`（白名单 `*`），其余应用在管理页「推送应用（appId / key）」页签增删改（内存态，重启回到默认应用）；删除后该 appId 的推送立即 401，白名单改动下一次推送即生效；
+- 凭证不来自配置文件，而是运行时注册表 `PushAppRegistry`：内置默认应用 `test-demo` / `c3RyZWFtLW5leHVz`（白名单 `test`，**整条只读**：启动时若台账里没有 / 字段被手改过就纠正回内置值并落盘；`DELETE` 返回 409、`PUT` 有任何改动返回 409，页面不给删除与修改按钮；要别的凭证就新建应用）；其余应用在管理页「推送应用（appId / key）」页签增删改，经 `PushAppStore` 落盘到本地 JSON 文件（`nexus.sse.app-store-path`，默认 `data/push-apps.json`），重启后自动读回；删除后该 appId 的推送立即 401，白名单改动下一次推送即生效；
 - 应用管理接口：`GET /sse/admin/apps`（返回明文 apiKey 与 `defaultAppId`，供测试页下拉使用）、`GET /sse/admin/apps/generate-key`（服务端生成 GUID 并做 Base64 编码，避免人工起弱口令）、`POST /sse/admin/apps`（apiKey 留空则自动生成；重名 → 409）、`PUT /sse/admin/apps/{appId}`（修改：只改传了的字段，apiKey 留空 / `allowedModules` 为 null 表示不改，`allowedModules` 空数组表示不限模块；appId 不存在 → 404）、`DELETE /sse/admin/apps/{appId}`；
 - `PushController.checkModulePermission` 做**业务模块白名单**：白名单归属 appId，如新建的 `order-svc` 只允许 `order`，推其它模块返回 403；
 - 目标解析见 `SsePusher.resolveTargets`：按模块命中 ∪ 定向命中，按 clientId 去重，一条连接不会被重复投递；
@@ -264,9 +265,10 @@ nexus.sse.max-connections=30000         # 准入
 nexus.sse.auth-enabled=true             # 推送鉴权（谁能推）
 nexus.sse.connect-auth-enabled=false    # 建连鉴权（谁能连），默认关闭
 nexus.sse.connect-auth-token=xxx        # 建连令牌，开启后必填；留空则一律拒绝
+nexus.sse.app-store-path=data/push-apps.json  # 推送应用台账落盘位置（首次启动播种 test-demo / c3RyZWFtLW5leHVz）
 ```
 
-> 推送应用不在配置里：内置 `test` / `test_secret`，其余在管理页运行时增删（仅内存，重启回到默认应用）。
+> 推送应用不在配置里：内置 `test-demo` / `c3RyZWFtLW5leHVz`（白名单 `test`，整条只读：不可改、不可删；升级前台账里的旧内置应用 `test` / `test_secret` 会在启动时自动摘除），其余在管理页运行时增删，并落盘到 `nexus.sse.app-store-path`（重启后仍在）。该文件含**明文 apiKey**，不要入库（已 gitignore）、部署时注意文件权限；多实例部署需各指向独立文件或换成共享存储实现 `PushAppStore`。
 
 > 跨域：全局内置于 `WebMvcConfig#addCorsMappings`（`/**`，源/方法/头/凭证全量放行，无配置项）；
 > `allowedOriginPatterns("*")` 是凭证模式下的唯一可行写法。
@@ -497,7 +499,7 @@ chunked_transfer_encoding on;
 
 1. 启动 `NexusSseApplication`（8088），访问 `http://localhost:8088/` → 自动跳转 `/admin`（默认管理页），点导航进 `/console` 推送测试页；
 2. 点「连接」→ 状态变「已连接」，日志出现建连消息（`sse/connected`）；
-3. 推送应用下拉默认选中内置应用 `test`（key `test_secret` 自动带出），业务模块默认 `test`（订阅默认值也是 `test`），推送内容可直接在 JSON 里改，点「推送」→ 日志出现 `test:bid` 及自定义字段，返回 `{"total":1,"success":1,"failed":0}`；把模块改成未订阅的 `order` 再推 → `total=0`（静默推空，是预期行为）；
+3. 推送应用下拉默认选中内置应用 `test-demo`（key `c3RyZWFtLW5leHVz` 自动带出），业务模块默认 `test`（订阅默认值也是 `test`，默认应用的白名单也只有它），推送内容可直接在 JSON 里改，点「推送」→ 日志出现 `test:bid` 及自定义字段，返回 `{"total":1,"success":1,"failed":0}`；把模块改成 `order` 再推 → `403`（默认应用白名单只有 `test`，越权模块被拦；换成白名单含 `order` 的应用再推则是 `total=0`，模块合法但无连接命中，属预期行为）；
 4. `curl http://localhost:8088/sse/admin/connections` 查看连接与模块统计；定向验证：把页面显示的 clientId 填进「定向 clientId」后再推送 → 只有该连接收到；
 5. **心跳验证**：打开页面后观察日志每 15s 收到一次 `PING` 并回 `PONG`（Network 面板可见 `/sse/pong`）；**回收验证**：直接断网，观察 90s 内服务端日志出现 `recycle by heartbeat timeout`；
 6. **鉴权验证**：不带 `X-Sse-Key` 或 `X-Sse-AppId` 未登记，请求 `/sse/push` 应返回 401（两者不配对也 401）；在管理页新增一个只允许 `order` 的应用，用它推 `bizModule=test` 应返回 403，用它**留空 `bizModule`** 同样应返回 403（不允许靠留空绕过白名单）；无白名单限制的应用两个寻址字段都不填应全模块广播（`total` = 在线连接数）。

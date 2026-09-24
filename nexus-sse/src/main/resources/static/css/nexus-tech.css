@@ -22,6 +22,44 @@
     --warn: #fbbf24;
     --radius: 14px;
     --shadow: 0 18px 40px -22px rgba(0, 0, 0, .9);
+
+    /* ---- 主题扩展变量 ----
+       原来散落在各条规则里的硬编码色（面板底、次级文字、霓虹字、按钮灰描边…）
+       全部收在这里：亮色主题只改这一组值，不必再逐条覆盖选择器。 */
+    --surface: rgba(9, 14, 28, .55);      /* 第二层底：表格容器 */
+    --surface-2: rgba(6, 10, 22, .7);     /* 第三层底：日志框 */
+    --input-bg: rgba(8, 13, 26, .72);
+    --input-bg-focus: rgba(8, 13, 26, .92);
+    --option-bg: #0b1224;                 /* select 展开后的选项底（UA 绘制，不吃半透明） */
+    --topbar-bg-1: rgba(8, 13, 26, .94);
+    --topbar-bg-2: rgba(8, 13, 26, .68);
+    --on-brand: #04121a;                  /* 落在品牌渐变（亮底）上的文字 */
+    --text-2: #9fb3d9;                    /* 次级文字：表头 / 表单标签 */
+    --text-3: #94a3c4;                    /* 更弱一级：未选中的导航 / 页签 */
+    --accent-text: #7dd3fc;               /* 霓虹文字：chip */
+    --code: #a5f3fc;                      /* 等宽文本：clientId / apiKey */
+    --ok-text: #6ee7b7;
+    --danger-text: #fda4af;
+    --warn-text: #fcd34d;
+    --brand-2-text: #a5b4fc;
+    --num-1: #eaf6ff;                     /* 指标数字渐变起点 */
+    --num-warn-1: #ffe4e6;
+    --stat-glow: rgba(34, 211, 238, .22);
+    --placeholder: #566a91;
+    --glass: rgba(148, 163, 184, .22);    /* 灰描边：输入框 / 按钮 */
+    --glass-hi: rgba(148, 163, 184, .4);
+    --btn-bg: rgba(148, 163, 184, .08);
+    --btn-bg-hover: rgba(148, 163, 184, .16);
+    --tabs-bg: rgba(148, 163, 184, .1);
+    --grid-line: rgba(94, 210, 255, .06);
+    --scan: rgba(34, 211, 238, .055);
+    --orb-1: #1e40af; --orb-1-op: .40;
+    --orb-2: #0e7490; --orb-2-op: .34;
+    --orb-3: #6d28d9; --orb-3-op: .26;
+    --card-line: rgba(34, 211, 238, .75);
+    --card-line-2: rgba(168, 85, 247, .5);
+    --scroll-track: #070c18;
+    --shadow-strong: rgba(0, 0, 0, 1);    /* 顶栏下方那道投影 */
 }
 
 * { box-sizing: border-box; }
@@ -57,8 +95,8 @@ body {
     z-index: 0;
     pointer-events: none;
     background-image:
-            linear-gradient(rgba(94, 210, 255, .06) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(94, 210, 255, .06) 1px, transparent 1px);
+            linear-gradient(var(--grid-line) 1px, transparent 1px),
+            linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
     background-size: 46px 46px;
     animation: gridDrift 22s linear infinite;
     -webkit-mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 68%);
@@ -80,19 +118,19 @@ body {
 
 .fx-orb.o1 {
     width: 560px; height: 560px; left: -180px; top: -170px;
-    background: #1e40af; opacity: .40;
+    background: var(--orb-1); opacity: var(--orb-1-op);
     animation: orbFloat 22s ease-in-out infinite;
 }
 
 .fx-orb.o2 {
     width: 480px; height: 480px; right: -150px; top: 10%;
-    background: #0e7490; opacity: .34;
+    background: var(--orb-2); opacity: var(--orb-2-op);
     animation: orbFloat 26s ease-in-out infinite reverse;
 }
 
 .fx-orb.o3 {
     width: 640px; height: 640px; left: 30%; bottom: -340px;
-    background: #6d28d9; opacity: .26;
+    background: var(--orb-3); opacity: var(--orb-3-op);
     animation: orbFloat 30s ease-in-out infinite;
 }
 
@@ -107,7 +145,7 @@ body {
     height: 160px;
     z-index: 0;
     pointer-events: none;
-    background: linear-gradient(180deg, transparent, rgba(34, 211, 238, .055), transparent);
+    background: linear-gradient(180deg, transparent, var(--scan), transparent);
     animation: scanMove 11s linear infinite;
 }
 
@@ -125,7 +163,7 @@ body {
     position: sticky;
     top: 0;
     z-index: 20;
-    background: linear-gradient(180deg, rgba(8, 13, 26, .94), rgba(8, 13, 26, .68));
+    background: linear-gradient(180deg, var(--topbar-bg-1), var(--topbar-bg-2));
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border-bottom: 1px solid var(--border);
@@ -134,7 +172,7 @@ body {
     align-items: center;
     flex-wrap: wrap;
     gap: 16px;
-    box-shadow: 0 12px 32px -20px #000;
+    box-shadow: 0 12px 32px -20px var(--shadow-strong);
 }
 
 /* 顶栏底边：一道循环扫过的霓虹亮线 */
@@ -164,7 +202,7 @@ body {
 }
 
 .brand-text {
-    background: linear-gradient(90deg, #e3ebff 10%, var(--brand) 45%, #c7d2fe 70%, #e3ebff 95%);
+    background: linear-gradient(90deg, var(--text) 10%, var(--brand) 45%, var(--brand-2-text) 70%, var(--text) 95%);
     background-size: 220% auto;
     -webkit-background-clip: text;
     background-clip: text;
@@ -184,7 +222,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #041018;
+    color: var(--on-brand);
     font-size: 12px;
     font-weight: 800;
     background: linear-gradient(135deg, var(--brand), var(--brand-2));
@@ -213,7 +251,7 @@ body {
 .nav a {
     position: relative;
     text-decoration: none;
-    color: #94a3c4;
+    color: var(--text-3);
     padding: 6px 15px;
     border-radius: 999px;
     font-size: 13px;
@@ -228,7 +266,7 @@ body {
 }
 
 .nav a.active {
-    color: #04121a;
+    color: var(--on-brand);
     font-weight: 600;
     background: linear-gradient(135deg, var(--brand), #67e8f9);
     border-color: transparent;
@@ -240,7 +278,7 @@ body {
 /* 顶栏「退出」：弱化到和 .meta 一个层级，hover 才转成危险色，免得抢 LIVE 的注意力 */
 .meta a.logout {
     padding: 3px 11px;
-    border: 1px solid rgba(148, 163, 184, .25);
+    border: 1px solid var(--glass);
     border-radius: 999px;
     color: var(--muted);
     font-size: 12px;
@@ -249,7 +287,7 @@ body {
 }
 
 .meta a.logout:hover {
-    color: #fda4af;
+    color: var(--danger-text);
     border-color: rgba(251, 113, 133, .45);
     background: rgba(251, 113, 133, .1);
 }
@@ -260,7 +298,7 @@ body {
     gap: 6px;
     font-size: 11px;
     letter-spacing: 1px;
-    color: #6ee7b7;
+    color: var(--ok-text);
     border: 1px solid rgba(52, 211, 153, .32);
     background: rgba(52, 211, 153, .08);
     border-radius: 999px;
@@ -318,7 +356,7 @@ body {
     position: absolute;
     top: 0; left: 0; right: 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, .75), rgba(168, 85, 247, .5), transparent);
+    background: linear-gradient(90deg, transparent, var(--card-line), var(--card-line-2), transparent);
     opacity: .7;
 }
 
@@ -393,14 +431,14 @@ body {
     font-weight: 700;
     margin-top: 4px;
     font-variant-numeric: tabular-nums;
-    background: linear-gradient(90deg, #eaf6ff, var(--brand));
+    background: linear-gradient(90deg, var(--num-1), var(--brand));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
 }
 
 .stat .num.warn {
-    background: linear-gradient(90deg, #ffe4e6, var(--danger));
+    background: linear-gradient(90deg, var(--num-warn-1), var(--danger));
     -webkit-background-clip: text;
     background-clip: text;
 }
@@ -416,7 +454,7 @@ body {
     border-radius: 50%;
     z-index: 0;
     pointer-events: none;
-    background: radial-gradient(circle, rgba(34, 211, 238, .22), transparent 70%);
+    background: radial-gradient(circle, var(--stat-glow), transparent 70%);
     animation: pulseGlow 3.6s ease-in-out infinite;
 }
 
@@ -445,7 +483,7 @@ body {
 .chip {
     background: rgba(34, 211, 238, .1);
     border: 1px solid rgba(34, 211, 238, .28);
-    color: #7dd3fc;
+    color: var(--accent-text);
     border-radius: 999px;
     padding: 2px 10px;
     font-size: 12px;
@@ -458,7 +496,7 @@ body {
     box-shadow: 0 0 12px rgba(34, 211, 238, .3);
 }
 
-.chip.global { background: rgba(251, 191, 36, .1); border-color: rgba(251, 191, 36, .32); color: #fcd34d; }
+.chip.global { background: rgba(251, 191, 36, .1); border-color: rgba(251, 191, 36, .32); color: var(--warn-text); }
 .chip.ghost { background: rgba(148, 163, 184, .08); border-color: rgba(148, 163, 184, .2); color: var(--muted); }
 
 .badge {
@@ -471,9 +509,9 @@ body {
     gap: 6px;
 }
 
-.badge.ok { background: rgba(52, 211, 153, .12); color: #6ee7b7; border: 1px solid rgba(52, 211, 153, .3); }
-.badge.stale { background: rgba(251, 113, 133, .12); color: #fda4af; border: 1px solid rgba(251, 113, 133, .32); }
-.badge.default { background: rgba(99, 102, 241, .14); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, .32); }
+.badge.ok { background: rgba(52, 211, 153, .12); color: var(--ok-text); border: 1px solid rgba(52, 211, 153, .3); }
+.badge.stale { background: rgba(251, 113, 133, .12); color: var(--danger-text); border: 1px solid rgba(251, 113, 133, .32); }
+.badge.default { background: rgba(99, 102, 241, .14); color: var(--brand-2-text); border: 1px solid rgba(99, 102, 241, .32); }
 
 .badge.ok::before {
     content: ''; width: 6px; height: 6px; border-radius: 50%;
@@ -498,7 +536,7 @@ body {
 .grid > .field.full, .grid-3 > .field.full { flex: 1 1 100%; }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
-.field label { font-size: 12px; color: #9fb3d9; font-weight: 600; }
+.field label { font-size: 12px; color: var(--text-2); font-weight: 600; }
 .field .hint { font-size: 11px; color: var(--muted); font-weight: 400; }
 .field-row { display: flex; gap: 8px; align-items: center; }
 .field-row input { flex: 1; min-width: 0; }
@@ -510,24 +548,24 @@ body {
 
 input[type=text], select, textarea {
     padding: 8px 11px;
-    border: 1px solid rgba(148, 163, 184, .22);
+    border: 1px solid var(--glass);
     border-radius: 9px;
     font-size: 13px;
-    background: rgba(8, 13, 26, .72);
+    background: var(--input-bg);
     color: var(--text);
     outline: none;
     transition: .18s;
 }
 
-input::placeholder, textarea::placeholder { color: #566a91; }
+input::placeholder, textarea::placeholder { color: var(--placeholder); }
 
 input[type=text]:focus, select:focus, textarea:focus {
     border-color: var(--brand);
-    background: rgba(8, 13, 26, .92);
+    background: var(--input-bg-focus);
     box-shadow: 0 0 0 3px rgba(34, 211, 238, .14);
 }
 
-select option { background: #0b1224; color: var(--text); }
+select option { background: var(--option-bg); color: var(--text); }
 input[type=checkbox] { accent-color: var(--brand); }
 
 button {
@@ -535,8 +573,8 @@ button {
     overflow: hidden;
     padding: 7px 15px;
     border-radius: 9px;
-    border: 1px solid rgba(148, 163, 184, .25);
-    background: rgba(148, 163, 184, .08);
+    border: 1px solid var(--glass);
+    background: var(--btn-bg);
     color: var(--text);
     font-size: 13px;
     cursor: pointer;
@@ -546,8 +584,8 @@ button {
 }
 
 button:hover {
-    background: rgba(148, 163, 184, .16);
-    border-color: rgba(148, 163, 184, .4);
+    background: var(--btn-bg-hover);
+    border-color: var(--glass-hi);
     transform: translateY(-1px);
 }
 
@@ -556,7 +594,7 @@ button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 button.primary {
     background: linear-gradient(135deg, var(--brand), var(--brand-2));
     border-color: transparent;
-    color: #04121a;
+    color: var(--on-brand);
     font-weight: 600;
     box-shadow: 0 6px 18px -8px rgba(34, 211, 238, .7);
 }
@@ -581,7 +619,7 @@ button.primary::after {
     55%, 100% { left: 170%; }
 }
 
-button.danger { color: #fda4af; border-color: rgba(251, 113, 133, .35); background: rgba(251, 113, 133, .08); }
+button.danger { color: var(--danger-text); border-color: rgba(251, 113, 133, .35); background: rgba(251, 113, 133, .08); }
 button.danger:hover { background: rgba(251, 113, 133, .18); border-color: rgba(251, 113, 133, .55); }
 
 button.link { border: 0; background: transparent; color: var(--brand); padding: 2px 4px; font-size: 12px; }
@@ -595,7 +633,7 @@ button.link:hover { background: transparent; text-decoration: underline; transfo
     padding: 4px;
     border-radius: 999px;
     margin-bottom: 18px;
-    background: rgba(148, 163, 184, .1);
+    background: var(--tabs-bg);
     border: 1px solid var(--border);
 }
 
@@ -605,7 +643,7 @@ button.link:hover { background: transparent; text-decoration: underline; transfo
     padding: 7px 20px;
     border-radius: 999px;
     font-size: 13px;
-    color: #94a3c4;
+    color: var(--text-3);
     cursor: pointer;
     transition: .2s;
 }
@@ -613,8 +651,8 @@ button.link:hover { background: transparent; text-decoration: underline; transfo
 .tabs button:hover { color: var(--brand); background: transparent; }
 
 .tabs button.active {
-    background: linear-gradient(135deg, rgba(34, 211, 238, .92), rgba(99, 102, 241, .88));
-    color: #04121a;
+    background: linear-gradient(135deg, var(--brand), var(--brand-2));
+    color: var(--on-brand);
     font-weight: 600;
     box-shadow: 0 0 18px rgba(34, 211, 238, .35);
 }
@@ -625,7 +663,7 @@ button.link:hover { background: transparent; text-decoration: underline; transfo
     border: 1px solid var(--border);
     border-radius: 12px;
     overflow: hidden;
-    background: rgba(9, 14, 28, .55);
+    background: var(--surface);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
@@ -642,7 +680,7 @@ th, td {
 th {
     background: linear-gradient(180deg, rgba(34, 211, 238, .09), rgba(34, 211, 238, .02));
     font-weight: 600;
-    color: #9fb3d9;
+    color: var(--text-2);
     white-space: nowrap;
     font-size: 12px;
     letter-spacing: .4px;
@@ -665,13 +703,13 @@ tr.row-new { animation: rowIn .5s ease both; }
     font-family: "JetBrains Mono", Consolas, "SFMono-Regular", monospace;
     font-size: 12px;
     word-break: break-all;
-    color: #a5f3fc;
+    color: var(--code);
 }
 
 .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
 .empty { padding: 34px; text-align: center; color: var(--muted); }
-.err { color: #fda4af; font-size: 13px; }
-.ok-text { color: #6ee7b7; font-size: 13px; }
+.err { color: var(--danger-text); font-size: 13px; }
+.ok-text { color: var(--ok-text); font-size: 13px; }
 .muted { color: var(--muted); }
 
 /* ---------- 状态点 / 信号条 / 日志 ---------- */
@@ -728,7 +766,7 @@ tr.row-new { animation: rowIn .5s ease both; }
 #log {
     border: 1px solid var(--border);
     border-radius: 12px;
-    background: rgba(6, 10, 22, .7);
+    background: var(--surface-2);
     padding: 10px 12px;
     height: 340px;
     overflow: auto;
@@ -775,15 +813,118 @@ tr.row-new { animation: rowIn .5s ease both; }
 /* ---------- 滚动条 ---------- */
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: #070c18; }
+::-webkit-scrollbar-track { background: var(--scroll-track); }
 
 ::-webkit-scrollbar-thumb {
     background: linear-gradient(180deg, rgba(34, 211, 238, .5), rgba(99, 102, 241, .5));
     border-radius: 8px;
-    border: 2px solid #070c18;
+    border: 2px solid var(--scroll-track);
 }
 
 ::-webkit-scrollbar-thumb:hover { background: rgba(34, 211, 238, .8); }
+
+/* ---------- 主题切换 ---------- */
+
+/* 顶栏里的主题按钮：带图标 + 文字，且用品牌色描边打底——
+   它是「功能入口」不是状态标识，藏成一行灰字会没人找得到 */
+.meta .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border: 1px solid var(--border-hi);
+    border-radius: 999px;
+    background: var(--brand-soft);
+    color: var(--text-2);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.meta .theme-toggle svg {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+}
+
+.meta .theme-toggle:hover {
+    color: var(--brand);
+    border-color: var(--brand);
+    background: var(--brand-soft);
+    transform: none;
+}
+
+/* ---------- 亮色主题 ----------
+   只覆盖 :root 里那组变量 + 少数「只能整条重写」的规则（半透明面板叠不出层次）。
+   品牌色在亮底上要用更深的一档（cyan-600 / indigo-600），否则青色文字发虚看不见。 */
+[data-theme="light"] {
+    --bg: #f4f7fb;
+    --panel: rgba(255, 255, 255, .82);
+    --border: rgba(15, 23, 42, .12);
+    --border-hi: rgba(8, 145, 178, .45);
+    --text: #0f172a;
+    --muted: #5b6b8c;
+    --brand: #0891b2;
+    --brand-2: #4f46e5;
+    --brand-3: #7c3aed;
+    --brand-soft: rgba(8, 145, 178, .1);
+    --danger: #e11d48;
+    --ok: #059669;
+    --warn: #b45309;
+    --shadow: 0 16px 34px -24px rgba(15, 23, 42, .5);
+
+    --surface: rgba(255, 255, 255, .75);
+    --surface-2: #f8fafc;
+    --input-bg: #ffffff;
+    --input-bg-focus: #ffffff;
+    --option-bg: #ffffff;
+    --topbar-bg-1: rgba(255, 255, 255, .94);
+    --topbar-bg-2: rgba(255, 255, 255, .74);
+    --on-brand: #ffffff;
+    --text-2: #334155;
+    --text-3: #64748b;
+    --accent-text: #0e7490;
+    --code: #0f766e;
+    --ok-text: #047857;
+    --danger-text: #be123c;
+    --warn-text: #a16207;
+    --brand-2-text: #4338ca;
+    --num-1: #0f172a;
+    --num-warn-1: #9f1239;
+    --stat-glow: rgba(8, 145, 178, .18);
+    --placeholder: #94a3b8;
+    --glass: rgba(15, 23, 42, .16);
+    --glass-hi: rgba(15, 23, 42, .3);
+    --btn-bg: rgba(15, 23, 42, .05);
+    --btn-bg-hover: rgba(15, 23, 42, .1);
+    --tabs-bg: rgba(15, 23, 42, .06);
+    --grid-line: rgba(15, 23, 42, .05);
+    --scan: rgba(8, 145, 178, .05);
+    --orb-1: #93c5fd; --orb-1-op: .45;
+    --orb-2: #67e8f9; --orb-2-op: .38;
+    --orb-3: #c4b5fd; --orb-3-op: .32;
+    --card-line: rgba(8, 145, 178, .6);
+    --card-line-2: rgba(124, 58, 237, .45);
+    --scroll-track: #e2e8f0;
+    --shadow-strong: rgba(15, 23, 42, .35);
+}
+
+/* 亮色下把「发光」类装饰收一收：深色那套霓虹描边在白底上只会显脏 */
+[data-theme="light"] .card::before { opacity: .45; }
+[data-theme="light"] .card:hover { box-shadow: 0 18px 36px -22px rgba(15, 23, 42, .35); }
+[data-theme="light"] .stat:hover { box-shadow: 0 0 0 1px rgba(8, 145, 178, .18), 0 12px 26px -18px rgba(15, 23, 42, .35); }
+[data-theme="light"] .chip { background: rgba(8, 145, 178, .08); border-color: rgba(8, 145, 178, .25); }
+[data-theme="light"] .chip:hover { background: rgba(8, 145, 178, .16); box-shadow: none; }
+[data-theme="light"] .live { border-color: rgba(5, 150, 105, .35); background: rgba(5, 150, 105, .1); }
+[data-theme="light"] .badge.ok { background: rgba(5, 150, 105, .1); border-color: rgba(5, 150, 105, .3); }
+[data-theme="light"] .badge.stale { background: rgba(225, 29, 72, .1); border-color: rgba(225, 29, 72, .3); }
+[data-theme="light"] .badge.default { background: rgba(79, 70, 229, .1); border-color: rgba(79, 70, 229, .3); }
+[data-theme="light"] table tbody tr:hover { background: rgba(8, 145, 178, .06); }
+[data-theme="light"] #log { box-shadow: inset 0 0 30px rgba(8, 145, 178, .06); }
+[data-theme="light"] .footer a:hover { text-shadow: none; }
 
 /* ---------- 响应式 & 减弱动效 ---------- */
 

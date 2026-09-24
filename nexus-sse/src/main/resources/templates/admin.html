@@ -6,6 +6,22 @@
     <title th:text="${title}">SSE 连接管理</title>
     <meta name="color-scheme" content="dark">
     <link rel="stylesheet" th:href="@{/css/nexus-tech.css}">
+    <script>
+        /* 主题必须在渲染前落地：nexus-tech.js 在 body 末尾，等它跑会先闪一帧深色。
+           这里只做「读取 + 打属性」，不碰 DOM 其余部分；按钮由 nexus-tech.js 挂载 */
+        (function () {
+            try {
+                // 默认深色（本项目的视觉基线），只有手动切换过才记在 localStorage
+                var t = localStorage.getItem('nexus-theme');
+                if (t !== 'light' && t !== 'dark') t = 'dark';
+                document.documentElement.setAttribute('data-theme', t);
+                var m = document.querySelector('meta[name="color-scheme"]');
+                if (m) m.setAttribute('content', t === 'light' ? 'light' : 'dark');
+            } catch (e) {
+                // 存储不可用时保持默认深色，不影响后续使用
+            }
+        })();
+    </script>
     <style>
         /* 管理页私有补充：公共科技感主题（深色 / 霓虹 / 动效）见 /css/nexus-tech.css */
         .toolbar label { font-size: 12px; }
@@ -139,7 +155,8 @@
 
         <div class="card">
             <h3 class="card-title">应用列表</h3>
-            <p class="card-sub">/sse/admin/apps · 新增 / 修改 / 删除仅改内存，重启回到内置默认应用；删除后该 appId 的推送立即 401</p>
+            <p class="card-sub">/sse/admin/apps · 新增 / 修改 / 删除会同步写入服务端台账文件，重启后仍在；删除后该 appId 的推送立即 401。内置默认应用 test-demo 整条只读：始终存在，appId / apiKey / 白名单 都不可改、不可删除，要别的凭证请新建应用</p>
+            <p class="card-sub" id="appStorePath" style="color:var(--muted)"></p>
             <div class="table-wrap">
                 <table>
                     <thead>
@@ -416,6 +433,9 @@ async function loadApps() {
         const data = await resp.json();
         apps = data.items || [];
         defaultAppId = data.defaultAppId || '';
+        // 台账文件位置由服务端下发：改完东西知道落在哪，也顺带说明「重启还在」
+        document.getElementById('appStorePath').textContent =
+            data.storePath ? '台账文件：' + data.storePath + '（重启后自动读回）' : '';
         setTip('appTip', '');
         renderApps();
     } catch (e) {
@@ -490,6 +510,13 @@ function renderApps() {
             cancel.style.marginLeft = '6px';
             cancel.onclick = cancelEdit;
             op.appendChild(cancel);
+        } else if (app.appId === defaultAppId) {
+            // 内置默认应用整条只读：不给「修改 / 删除」，服务端对它也一律 409。
+            // 要别的凭证（别的 appId / key / 白名单）就新建应用
+            const forbid = document.createElement('span');
+            forbid.className = 'sub';
+            forbid.textContent = '内置默认 · 只读';
+            op.appendChild(forbid);
         } else {
             const edit = document.createElement('button');
             edit.textContent = '修改';
@@ -616,7 +643,7 @@ async function addApp() {
 }
 
 async function removeApp(appId, btn) {
-    if (!confirm('确认删除应用？\n\n' + appId + '\n\n删除后用它推送会立即返回 401。')) return;
+    if (!confirm('确认删除应用？\n\n' + appId + '\n\n删除后用它推送会立即返回 401，且台账文件同步删除，重启不会恢复。')) return;
     btn.disabled = true;
     try {
         const resp = await fetch('/sse/admin/apps/' + encodeURIComponent(appId), {method: 'DELETE'});

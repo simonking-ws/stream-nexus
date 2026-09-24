@@ -111,8 +111,8 @@ registry.addMapping("/**")
 
 0. 访问 `http://localhost:8088/` 会自动跳转 `http://localhost:8088/admin`（默认管理页）；首次访问先跳登录页，用默认账号 `admin` / `adminsse` 登录后回跳；点导航「推送测试」进入 `http://localhost:8088/console`。
 1. 在推送测试页保持默认订阅模块 `test`，点击「连接」，状态变为「已连接」。
-2. 推送应用下拉默认选中内置应用 `test`（自动带出 key `test_secret`），业务模块默认 `test`、动作 `bid`，推送内容可直接改 JSON，点「推送」→ 日志出现 `test:bid` 及自定义字段，返回 `{"total":1,"success":1,"failed":0}`。
-3. 把模块改成未订阅的 `order` 再推 → `total=0`（无连接命中，属预期行为）。
+2. 推送应用下拉默认选中内置应用 `test-demo`（自动带出 key `c3RyZWFtLW5leHVz`），业务模块默认 `test`、动作 `bid`，推送内容可直接改 JSON，点「推送」→ 日志出现 `test:bid` 及自定义字段，返回 `{"total":1,"success":1,"failed":0}`。
+3. 把模块改成 `order` 再推 → `403`（默认应用白名单只有 `test`，越权模块被鉴权拦下）；换成管理页新建的、白名单含 `order` 的应用再推 → `total=0`（模块合法但无连接命中，属预期行为）。
 4. 观察日志每 15s 收到一次 `PING`，Network 面板可见 `/sse/pong` 应答。
 5. 访问 `http://localhost:8088/admin`（或根路径 `/`）查看在线连接台账（clientId / 业务模块 / 建连时间 / 最近心跳 / 静默时长），支持过滤、排序、自动刷新与「下线」；切到「推送应用（appId / key）」页签可新增 / 修改 / 删除应用（apiKey 留空自动生成：GUID → Base64）。
 
@@ -124,7 +124,7 @@ registry.addMapping("/**")
 `curl -X PUT http://localhost:8088/sse/admin/apps/{appId} -d '{"allowedModules":["test","order"]}'`（改模块白名单，apiKey 留空表示不改）、
 `curl -X DELETE http://localhost:8088/sse/admin/apps/{appId}`。
 
-> 内置默认应用为 `test` / `test_secret`（白名单 `*`），开箱即用；应用不在配置文件里，管理页新增的应用**仅内存生效，重启回到内置默认应用**。
+> 内置默认应用为 `test-demo` / `c3RyZWFtLW5leHVz`（白名单 `test`），开箱即用且**整条只读**：始终存在，appId / apiKey / 白名单 都不可改、不可删除，要别的凭证请在管理页新建。管理页新增的应用会落盘到 `nexus.sse.app-store-path`（默认 `data/push-apps.json`），**重启后仍在**。
 
 ## 四、消息协议
 
@@ -221,10 +221,10 @@ es.onerror = () => {};
 ```bash
 curl -X POST http://localhost:8088/sse/push \
   -H 'Content-Type: application/json' \
-  -H 'X-Sse-AppId: test' \
-  -H 'X-Sse-Key: test_secret' \
+  -H 'X-Sse-AppId: test-demo' \
+  -H 'X-Sse-Key: c3RyZWFtLW5leHVz' \
   -d '{
-        "bizModule": "lot",
+        "bizModule": "test",
         "action": "bid",
         "data": {"itemId": "L123", "currentPrice": 5200}
       }'
@@ -244,8 +244,8 @@ curl -X POST http://localhost:8088/sse/push \
 ```bash
 curl -X POST http://localhost:8088/sse/push \
   -H 'Content-Type: application/json' \
-  -H 'X-Sse-AppId: test' \
-  -H 'X-Sse-Key: test_secret' \
+  -H 'X-Sse-AppId: test-demo' \
+  -H 'X-Sse-Key: c3RyZWFtLW5leHVz' \
   -d '{"clientIds":["<服务端建连回执下发的 clientId>"],"action":"bid","data":{"itemId":"L123"}}'
 ```
 
@@ -254,10 +254,10 @@ Java 侧调用示例（Spring `RestClient`）：
 ```java
 restClient.post()
         .uri("http://localhost:8088/sse/push")
-        .header("X-Sse-AppId", "test")
-        .header("X-Sse-Key", "test_secret")
+        .header("X-Sse-AppId", "test-demo")
+        .header("X-Sse-Key", "c3RyZWFtLW5leHVz")
         .body(PushRequest.builder()
-                .bizModule("lot")
+                .bizModule("test")
                 .action("bid")
                 .data(Map.of("itemId", "L123", "currentPrice", 5200))
                 .build())
@@ -286,7 +286,7 @@ restClient.post()
 
 **三套鉴权互不干涉**：`auth-enabled` 管「谁能推」、`connect-auth-enabled` 管「谁能连」、`nexus.sse.admin.*` 管「谁能打开运维页面」。登录只守 `/admin`、`/console`、`/sse/admin/**`，`/sse/subscribe` 与 `/sse/push` 不走登录态。运维接口未登录返回 401 JSON，页面未登录 302 到 `/login`（带回跳地址）。
 
-**推送应用不在这里配置**：内置默认应用 `test` / `test_secret`（白名单 `*`，开箱即用），其余应用在管理页「推送应用（appId / key）」页签运行时增删改（apiKey 可自动生成：GUID → Base64），改动**仅内存生效，重启回到内置默认应用**。
+**推送应用不在这里配置**：内置默认应用 `test-demo` / `c3RyZWFtLW5leHVz`（白名单 `test`，开箱即用且**只读**：不可改、不可删），其余应用在管理页「推送应用（appId / key）」页签运行时增删改（apiKey 可自动生成：GUID → Base64），改动经 `nexus.sse.app-store-path`（默认 `data/push-apps.json`）落盘，**重启后仍在**。
 
 反向代理（Nginx）下必须关闭缓冲，否则消息会攒在缓冲区不下发：
 
@@ -488,7 +488,8 @@ stream-nexus
         ├── connection/SseClientRegistry.java    # 连接主表 + 模块索引 + 统一回收
         ├── core/SseSender.java / SsePusher.java # 单条写入 / 扇出
         ├── schedule/HeartbeatTask.java          # 心跳下发 + 连接回收
-        ├── auth/PushAppRegistry.java / PushApp.java  # 推送应用运行时注册表（内置 test/test_secret + 增删）
+        ├── auth/PushAppRegistry.java / PushApp.java  # 推送应用运行时注册表（内置 test-demo 只读凭证 + 增删）
+        ├── auth/PushAppStore.java                     # 应用台账持久化（本地 JSON 文件，重启读回）
         ├── controller/                          # 订阅 / 推送 / 运维接口 + PageController（页面跳转）+ LoginController（登录 / 登出）
         └── resources/templates/                 # Thymeleaf 页面
             ├── admin.html                       # 连接管理页（默认页：在线台账 / 强制下线）

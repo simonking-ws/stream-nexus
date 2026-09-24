@@ -6,6 +6,22 @@
     <title th:text="${title}">SSE 推送测试</title>
     <meta name="color-scheme" content="dark">
     <link rel="stylesheet" th:href="@{/css/nexus-tech.css}">
+    <script>
+        /* 主题必须在渲染前落地：nexus-tech.js 在 body 末尾，等它跑会先闪一帧深色。
+           这里只做「读取 + 打属性」，不碰 DOM 其余部分；按钮由 nexus-tech.js 挂载 */
+        (function () {
+            try {
+                // 默认深色（本项目的视觉基线），只有手动切换过才记在 localStorage
+                var t = localStorage.getItem('nexus-theme');
+                if (t !== 'light' && t !== 'dark') t = 'dark';
+                document.documentElement.setAttribute('data-theme', t);
+                var m = document.querySelector('meta[name="color-scheme"]');
+                if (m) m.setAttribute('content', t === 'light' ? 'light' : 'dark');
+            } catch (e) {
+                // 存储不可用时保持默认深色，不影响后续使用
+            }
+        })();
+    </script>
     <style>
         /* 推送测试页私有补充：公共科技感主题（深色 / 霓虹 / 动效）见 /css/nexus-tech.css */
         input[type=text], select, textarea { width: 100%; }
@@ -45,6 +61,13 @@
 </div>
 
 <div class="wrap">
+    <!-- 订阅与推送拆成两个页签：两者互不依赖（可以先推后连，也可以只看订阅），
+         堆在一屏要来回滚动；收发日志留在页签外，订阅收到的消息与推送结果都往那儿落 -->
+    <div class="tabs">
+        <button id="tabBtnSub" class="active" onclick="switchTab('sub')">订阅</button>
+        <button id="tabBtnPush" onclick="switchTab('push')">推送</button>
+    </div>
+
     <div class="card" id="cardSub">
         <h3 class="card-title">订阅</h3>
         <p class="card-sub">一条连接可订阅多个模块，模块名须与推送侧 bizModule 完全一致（含大小写）</p>
@@ -79,7 +102,7 @@
         </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="cardPush" hidden>
         <h3 class="card-title">推送</h3>
         <p class="card-sub">POST /sse/push · 需 X-Sse-AppId + X-Sse-Key 配对，且 bizModule 在该应用白名单内</p>
         <div class="grid">
@@ -154,6 +177,21 @@ function connTip(text, isErr) {
     const el = document.getElementById('connTip');
     el.className = isErr ? 'err' : 'muted';
     el.textContent = text;
+}
+
+/**
+ * 页签切换：订阅 / 推送二选一；收发日志在页签外，两个页签共用
+ *
+ * <p>首次切到「推送」才拉应用列表——之后再切不重新拉，否则会把用户手动覆盖的
+ * key 和已选中的应用冲掉。
+ */
+function switchTab(name) {
+    const isSub = name === 'sub';
+    document.getElementById('cardSub').hidden = !isSub;
+    document.getElementById('cardPush').hidden = isSub;
+    document.getElementById('tabBtnSub').className = isSub ? 'active' : '';
+    document.getElementById('tabBtnPush').className = isSub ? '' : 'active';
+    if (!isSub && appList.length === 0) loadApps();
 }
 
 const bizRoutes = {

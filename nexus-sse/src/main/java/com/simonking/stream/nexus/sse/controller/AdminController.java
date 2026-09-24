@@ -62,6 +62,8 @@ public class AdminController {
         result.put("total", items.size());
         result.put("authEnabled", appRegistry.isAuthEnabled());
         result.put("defaultAppId", PushAppRegistry.DEFAULT_APP_ID);
+        // 台账落盘位置：页面直接展示，让人知道改动写在哪、重启还在不在
+        result.put("storePath", appRegistry.storePath());
         result.put("items", items);
         return result;
     }
@@ -98,6 +100,9 @@ public class AdminController {
      *
      * <p>{@code apiKey} 为空 / 全空白表示不修改；{@code allowedModules} 为 null 表示不修改，
      * 传空数组表示清空限制（归一化成 {@code *}）。改动立即生效：下一次推送就按新白名单鉴权。
+     *
+     * <p>内置默认应用例外：整条只读，appId / apiKey / 白名单 都改不动（有改动 → 409）；
+     * 传回来的值与现状完全一致则视为「没改」，正常返回（幂等，不报错）。
      */
     @PutMapping("/apps/{appId}")
     public Map<String, Object> updateApp(@PathVariable String appId, @RequestBody AppUpdateRequest body) {
@@ -105,6 +110,25 @@ public class AdminController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "appId not found: " + appId));
         if (body == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request body is required");
+        }
+        // 内置默认应用只读：键和值都写死在代码里，改了等于把联调与文档的基准改掉，
+        // 且所有接入方都要跟着换——要别的凭证就新建应用
+        if (PushAppRegistry.isBuiltIn(appId)) {
+            boolean keyUnchanged = !StringUtils.hasText(body.apiKey())
+                    || PushAppRegistry.DEFAULT_API_KEY.equals(body.apiKey().trim());
+            boolean modulesUnchanged = body.allowedModules() == null
+                    || PushAppRegistry.normalize(body.allowedModules()).equals(PushAppRegistry.DEFAULT_ALLOWED_MODULES);
+            if (!keyUnchanged || !modulesUnchanged) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "内置默认应用只读，appId / apiKey / 白名单 均不可修改：" + PushAppRegistry.DEFAULT_APP_ID);
+            }
+            Map<String, Object> unchanged = new LinkedHashMap<>();
+            unchanged.put("ok", true);
+            unchanged.put("appId", existed.appId());
+            unchanged.put("apiKey", existed.apiKey());
+            unchanged.put("allowedModules", existed.allowedModules());
+            unchanged.put("changed", false);
+            return unchanged;
         }
         String apiKey = StringUtils.hasText(body.apiKey()) ? body.apiKey().trim() : existed.apiKey();
         List<String> modules = body.allowedModules() == null
@@ -123,10 +147,17 @@ public class AdminController {
     }
 
     /**
-     * 删除应用：立即生效，该 appId 之后的推送一律 401
+     * 删除应用：立即生效，该 appId 之后的推送一律 401；并同步落盘，重启不会自己回来
+     *
+     * <p>内置默认应用例外：始终存在且只读，删它返回 409（页面也不给删除 / 修改按钮）。
+     * 要别的凭证就新建应用，而不是改它、删它。
      */
     @DeleteMapping("/apps/{appId}")
     public Map<String, Object> removeApp(@PathVariable String appId) {
+        if (PushAppRegistry.isBuiltIn(appId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "内置默认应用不可删除（只读凭证）：" + PushAppRegistry.DEFAULT_APP_ID);
+        }
         boolean removed = appRegistry.remove(appId);
         return Map.of("ok", true, "appId", appId, "removed", removed);
     }
