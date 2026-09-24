@@ -43,6 +43,7 @@
 | POST | `/sse/push` | 是 | 业务系统推送入口 |
 | GET | `/sse/admin/connections` | 需登录 | 连接概览：总数、模块分布、连接明细 |
 | DELETE | `/sse/admin/connections/{clientId}` | 需登录 | 强制下线指定连接 |
+| DELETE | `/sse/admin/connections` | 需登录 | 全部下线（客户端会自动重连，语义是强制重连而非封禁） |
 | GET/POST/PUT/DELETE | `/sse/admin/apps` | 需登录 | 推送应用运行时增删改 |
 
 状态码约定：
@@ -182,6 +183,7 @@ PushResult result = client.ssePush(PushRequest.builder()
 | `nexus.sse.heartbeat-timeout` | `90s` | 多久没收到 `PONG` 判定失联（应 ≥ 3 倍心跳间隔） |
 | `nexus.sse.max-lifetime` | `0` | 连接最大存活时间（软重置），0 表示不限制 |
 | `nexus.sse.max-connections` | `30000` | 最大连接数，0 表示不限制 |
+| `nexus.sse.ip2region-path` | `classpath:ip2region.xdb` | 台账 IP 归属地的离线库（xdb）；数据文件需自备，缺失时城市列显示 `-`，私有地址直接判为「局域网」 |
 | `nexus.sse.auth-enabled` | `true` | 是否开启推送鉴权（谁能推） |
 | `nexus.sse.connect-auth-enabled` | `false` | 是否开启**建连**鉴权（谁能连 `/sse/subscribe`） |
 | `nexus.sse.connect-auth-token` | `57yW56iL5pyd6Iqx5aSV5ou+` | 建连令牌，所有订阅方共用；开关打开且留空时建连一律拒绝 |
@@ -256,6 +258,9 @@ curl http://localhost:8088/sse/admin/connections
 
 # 强制下线
 curl -X DELETE http://localhost:8088/sse/admin/connections/{clientId}
+
+# 全部下线
+curl -X DELETE http://localhost:8088/sse/admin/connections
 
 # 查看推送应用
 curl http://localhost:8088/sse/admin/apps

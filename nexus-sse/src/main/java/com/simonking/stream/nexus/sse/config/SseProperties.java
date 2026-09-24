@@ -74,6 +74,17 @@ public class SseProperties {
     private boolean connectAuthEnabled = false;
 
     /**
+     * IP 归属地（城市）离线库位置：ip2region 的 xdb 数据文件
+     *
+     * <p>支持 {@code classpath:} 与 {@code file:} 前缀；相对路径的 file: 以进程工作目录为基准，
+     * 部署时建议写成绝对路径，避免换个启动目录就找不到库。
+     *
+     * <p>文件缺失不是致命错误：台账城市列降级显示 {@code -}，其余功能照常。
+     * 内网部署（客户端全是私有地址）本就不需要它——私有地址直接判定为「局域网」，不查库。
+     */
+    private String ip2regionPath = "classpath:ip2region.xdb";
+
+    /**
      * 建连令牌：所有订阅方共用的共享口令，与 {@link #connectAuthEnabled} 配对配置
      *
      * <p>开关打开而此处留空时，建连请求**全部拒绝**（失败关闭）——

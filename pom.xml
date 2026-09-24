@@ -25,6 +25,7 @@
     <properties>
         <nexus-common.version>1.0.0</nexus-common.version>
 
+        <ip2region.version>3.3.7</ip2region.version>
         <netty.version>4.2.18.Final</netty.version>
         <okhttp.version>4.12.0</okhttp.version>
         <java.version>17</java.version>
@@ -60,6 +61,14 @@
                 <groupId>com.squareup.okhttp3</groupId>
                 <artifactId>okhttp</artifactId>
                 <version>${okhttp.version}</version>
+            </dependency>
+            <!-- IP 归属地（城市）：离线库，编译期零传递依赖。
+            数据文件 ip2region.xdb 需自备，放到 resources 或用 nexus.sse.ip2region-path 指向；
+            文件缺失时台账城市列降级为「-」，其余功能不受影响 -->
+            <dependency>
+                <groupId>org.lionsoul</groupId>
+                <artifactId>ip2region</artifactId>
+                <version>${ip2region.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

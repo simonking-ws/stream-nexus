@@ -47,6 +47,14 @@
 </div>
 
 <div class="wrap">
+    <!-- 浏览器同源连接上限：SSE 是长连接，占满后本页请求会被排队阻塞，先把规则写在这儿 -->
+    <div class="conn-note">
+        <span class="cn-body">
+            <b>浏览器同源连接上限 6 条</b>：HTTP/1.1 下每个域名最多 6 条并发连接，SSE 长连接会长期占用不释放。
+            订阅超过 5 条后，本页及其他页面的请求会被一直阻塞（表现为加载转圈、接口无响应）。
+            多个模块请用 <code>modules=a,b,c</code> 合并到一条连接，或关闭多余的订阅标签页。
+        </span>
+    </div>
     <div class="tabs">
         <button id="tabBtnConn" class="active" onclick="switchTab('conn')">连接台账</button>
         <button id="tabBtnApp" onclick="switchTab('app')">推送应用（appId / key）</button>
@@ -84,6 +92,9 @@
 
         <div class="card toolbar">
             <button onclick="load()">刷新</button>
+            <!-- 全部下线：一次性断开所有连接。客户端会自动重连，故语义是「强制重连」不是封禁 -->
+            <button class="danger" onclick="kickAll(this)"
+                    title="断开当前全部连接；客户端会自动重连，要真正拦住请用建连鉴权">全部下线</button>
             <label style="font-size:12px">自动刷新
                 <select id="interval" onchange="applyInterval()">
                     <option value="0">关闭</option>
@@ -93,15 +104,16 @@
                 </select>
             </label>
             <label style="font-size:12px">排序
-                <select id="sort" onchange="render()">
+                <select id="sort" onchange="onFilterChange()">
                     <option value="createTime">建连时间（新→旧）</option>
                     <option value="silence">静默时长（长→短）</option>
                     <option value="clientId">clientId</option>
                 </select>
             </label>
-            <input type="text" id="keyword" placeholder="过滤 clientId / IP / 业务模块" oninput="render()" style="width:240px">
+            <input type="text" id="keyword" placeholder="过滤 clientId / IP / 城市 / 业务模块"
+                   oninput="onFilterChange()" style="width:240px">
             <label style="font-size:12px;display:flex;align-items:center;gap:6px">
-                <input type="checkbox" id="staleOnly" onchange="render()"> 只看疑似失联
+                <input type="checkbox" id="staleOnly" onchange="onFilterChange()"> 只看疑似失联
             </label>
             <span class="muted" id="tip" style="color:var(--muted);font-size:12px"></span>
         </div>
@@ -110,8 +122,8 @@
             <table>
                 <thead>
                 <tr>
-                    <th style="width:24%">clientId</th>
-                    <th style="width:12%">客户端 IP</th>
+                    <th style="width:22%">clientId</th>
+                    <th style="width:14%">客户端 IP</th>
                     <th style="width:16%">业务模块</th>
                     <th style="width:13%">建连时间</th>
                     <th style="width:13%">最近心跳</th>
@@ -122,6 +134,8 @@
                 <tbody id="tbody"></tbody>
             </table>
             <div class="empty" id="empty" hidden>暂无连接</div>
+            <!-- 分页：过滤后超过 10 条才出现 -->
+            <div class="pager" id="pager" hidden></div>
         </div>
     </div>
 
@@ -197,6 +211,10 @@ let editingAppId = '';
 // 上一次渲染见过的 clientId：用来判断哪些行是新来的（新行才做入场动画）
 let knownIds = null;
 let prevTotal = null;
+// 台账分页：过滤后超过 PAGE_SIZE 条才出分页条。
+// 自动刷新保持当前页（盯着第 3 页看时不该被刷新踢回第 1 页），只有筛选条件变了才重置
+let page = 1;
+const PAGE_SIZE = 10;
 // 服务端时间 - 浏览器时间：把浏览器时钟对齐服务端，读秒才不会被本机时钟带偏
 let serverSkew = 0;
 // 运行时间读秒定时器（独立于台账自动刷新）
@@ -288,7 +306,20 @@ function matches(it) {
     if (!kw) return true;
     return it.clientId.toLowerCase().includes(kw)
         || String(it.ip || '').toLowerCase().includes(kw)
+        // 归属地：缺库时服务端下发 '-'，参与匹配只会把 '-' 当成关键字误中，故跳过占位值
+        || (it.city && it.city !== '-' && it.city.toLowerCase().includes(kw))
         || (it.modules || []).join(',').toLowerCase().includes(kw);
+}
+
+/** 筛选条件变了要回第 1 页：停在第 5 页时改个关键字，结果可能只剩 3 条 */
+function onFilterChange() {
+    page = 1;
+    render();
+}
+
+function gotoPage(p) {
+    page = Math.max(1, p);
+    render();
 }
 
 function sorted(list) {
@@ -343,11 +374,20 @@ function render() {
         chips.appendChild(chip(name + ' · ' + count, name === '*' ? 'global' : ''));
     });
 
+    // 分页：total 是服务端在线总数（上面指标卡用），翻页按「过滤后」的条数算。
+    // 不叫 count：上面 modules.forEach 的解构参数已经用它了，重名虽然合法但读起来容易混
+    const filtered = list.length;
+    const pages = Math.max(Math.ceil(filtered / PAGE_SIZE), 1);
+    // 自动刷新时连接可能被回收，当前页会越界（原在第 5 页，现在只剩 2 页）→ 往回退
+    if (page > pages) page = pages;
+    const start = (page - 1) * PAGE_SIZE;
+    const pageItems = list.slice(start, start + PAGE_SIZE);
+
     const tbody = document.getElementById('tbody');
     tbody.innerHTML = '';
     // 首屏整体错峰淡入；之后只有「新出现的连接」才播动画，避免每 5 秒整张表闪一次
     const firstPaint = knownIds === null;
-    list.forEach((it, idx) => {
+    pageItems.forEach((it, idx) => {
         const tr = document.createElement('tr');
         if (firstPaint) {
             tr.className = 'row-new';
@@ -364,12 +404,13 @@ function render() {
         const ipt = document.createElement('td');
         ipt.className = 'cid';
         ipt.textContent = it.ip || '-';
-        // 本机（localhost）访问标一下：一眼分清是自己在浏览器里调试，还是外部客户端连进来的
+        // IP 下方补归属地：本机标「本机」（一眼分清是自己调试还是外部客户端连进来的），
+        // 其余显示城市。缺 IP 库时服务端下发 '-'，这里就不补，免得留一行没意义的占位
+        const city = (it.city && it.city !== '-') ? it.city : '';
         if (isLocalIp(it.ip)) {
-            const local = document.createElement('div');
-            local.className = 'sub';
-            local.textContent = '本机';
-            ipt.appendChild(local);
+            ipt.appendChild(sub('本机'));
+        } else if (city) {
+            ipt.appendChild(sub(city));
         }
         tr.appendChild(ipt);
 
@@ -417,7 +458,44 @@ function render() {
     // 记住这一轮的全部 clientId（用全量而非过滤后的列表：切筛选条件不该被当成新连接）
     knownIds = new Set(items.map(it => it.clientId));
 
-    document.getElementById('empty').hidden = list.length > 0;
+    document.getElementById('empty').hidden = pageItems.length > 0;
+    renderPager(filtered, pages);
+}
+
+/** 单元格里的次级小字：IP 下方的归属地、时间列的在线时长都用它 */
+function sub(text) {
+    const el = document.createElement('div');
+    el.className = 'sub';
+    el.textContent = text;
+    return el;
+}
+
+/**
+ * 分页条：只有一页时整条隐藏——多数时候连接数不多，挂一排禁用按钮纯属噪音
+ */
+function renderPager(count, pages) {
+    const pager = document.getElementById('pager');
+    pager.hidden = pages <= 1;
+    pager.innerHTML = '';
+    if (pages <= 1) return;
+
+    const info = document.createElement('span');
+    info.className = 'muted';
+    info.textContent = '共 ' + count + ' 条 · 第 ' + page + '/' + pages + ' 页';
+    pager.appendChild(info);
+
+    pager.appendChild(pagerBtn('« 首页', () => gotoPage(1), page === 1));
+    pager.appendChild(pagerBtn('上一页', () => gotoPage(page - 1), page === 1));
+    pager.appendChild(pagerBtn('下一页', () => gotoPage(page + 1), page === pages));
+    pager.appendChild(pagerBtn('末页 »', () => gotoPage(pages), page === pages));
+}
+
+function pagerBtn(text, onclick, disabled) {
+    const b = document.createElement('button');
+    b.textContent = text;
+    b.disabled = !!disabled;
+    b.onclick = onclick;
+    return b;
 }
 
 function setTip(id, text, isErr) {
@@ -671,6 +749,38 @@ async function kick(clientId, btn) {
         return;
     }
     await load();
+}
+
+/**
+ * 全部下线：一次断开所有连接
+ *
+ * <p>必须二次确认：这是不可逆的批量操作，且按下后所有订阅端会同时重连（客户端自动重连，
+ * 所以是「强制重连」而非封禁）。回显服务端返回的实际条数，而不是点按钮时看到的台账数——
+ * 并发下两者可能不一致，报真实数字才不会让人以为漏了下线。
+ */
+async function kickAll(btn) {
+    const total = meta.total ?? 0;
+    if (total === 0) {
+        setTip('tip', '当前没有连接', true);
+        return;
+    }
+    if (!confirm('确认全部下线？\n\n将断开当前 ' + total + ' 条连接，客户端会自动重连。')) return;
+    btn.disabled = true;
+    btn.textContent = '下线中';
+    try {
+        const resp = await fetch('/sse/admin/connections', {method: 'DELETE'});
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        page = 1;
+        await load();
+        // load() 会清提示，成功文案放在刷新之后
+        setTip('tip', '已下线 ' + (data.removed ?? 0) + ' 条连接');
+    } catch (e) {
+        setTip('tip', '全部下线失败：' + e.message, true);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '全部下线';
+    }
 }
 
 load();

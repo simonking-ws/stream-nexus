@@ -5,6 +5,7 @@ import com.simonking.stream.nexus.sse.auth.PushAppRegistry;
 import com.simonking.stream.nexus.sse.config.SseProperties;
 import com.simonking.stream.nexus.sse.connection.SseClient;
 import com.simonking.stream.nexus.sse.connection.SseClientRegistry;
+import com.simonking.stream.nexus.sse.location.IpLocationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.util.StringUtils;
@@ -48,6 +49,8 @@ public class AdminController {
     private final PushAppRegistry appRegistry;
 
     private final SseProperties properties;
+
+    private final IpLocationService ipLocation;
 
     /**
      * 推送应用列表（管理页的应用台账 / 测试页的下拉数据源）
@@ -201,6 +204,21 @@ public class AdminController {
     }
 
     /**
+     * 全部下线：一次清空所有连接
+     *
+     * <p>注意语义：客户端（浏览器 {@code EventSource}）断开后会自动重连，所以这是
+     * <b>强制重连</b>而不是「封禁」——要真正拦住某类客户端请用建连鉴权（{@code connect-auth-enabled}）。
+     * 典型用途是发布后让所有订阅端重新拉全量状态，或清掉一批僵尸连接。
+     *
+     * <p>返回实际下线条数（并发下可能略少于调用瞬间的台账数），页面据此回显。
+     */
+    @DeleteMapping("/connections")
+    public Map<String, Object> kickAll() {
+        int removed = registry.removeAll();
+        return Map.of("ok", true, "removed", removed);
+    }
+
+    /**
      * 新增应用的请求体：{@code allowedModules} 留空 = 不限制模块
      */
     public record AppRequest(String appId, String apiKey, List<String> allowedModules) {
@@ -218,6 +236,8 @@ public class AdminController {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("clientId", client.getClientId());
         view.put("ip", client.getIp() == null ? "-" : client.getIp());
+        // 归属地：缺库时下发 "-"，页面据此不展示这一行，避免出现空的城市位
+        view.put("city", ipLocation.city(client.getIp()));
         view.put("modules", client.getModules());
         view.put("createTime", client.getCreateTime());
         view.put("lastPongTime", client.getLastPongTime());

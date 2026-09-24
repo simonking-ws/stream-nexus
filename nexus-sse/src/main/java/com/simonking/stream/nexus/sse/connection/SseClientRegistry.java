@@ -120,6 +120,20 @@ public class SseClientRegistry {
     }
 
     /**
+     * 全部下线：逐条走 {@link #remove(String)}，保证模块索引与 emitter 一并清理
+     *
+     * <p>刻意先复制一份 id 再逐条删：{@link #remove(String)} 会动 {@code clients}，
+     * 边遍历边删在 ConcurrentHashMap 上虽不抛异常，但语义上不如先快照清晰。
+     *
+     * @return 本次下线的条数
+     */
+    public int removeAll() {
+        List<String> ids = new ArrayList<>(clients.keySet());
+        ids.forEach(this::remove);
+        return ids.size();
+    }
+
+    /**
      * 业务模块连接数统计
      */
     public Map<String, Integer> moduleStats() {

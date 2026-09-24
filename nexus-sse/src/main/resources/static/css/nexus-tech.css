@@ -940,3 +940,73 @@ tr.row-new { animation: rowIn .5s ease both; }
         transition-duration: .001ms !important;
     }
 }
+
+/* ---------- 同源连接上限提示 ----------
+   常驻说明，但按「警示」做：SSE 占满连接后症状是白屏转圈，太安静会没人看见。
+   配色走 --warn 系变量，亮色主题自动换成深一档 */
+.conn-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 11px 14px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--warn-text);
+    background: rgba(251, 191, 36, .10);
+    border: 1px solid rgba(251, 191, 36, .34);
+    border-left: 3px solid var(--warn);
+    animation: conn-note-pulse 2.6s ease-in-out infinite;
+}
+
+/* 感叹号徽标：纯 CSS 画，省得再引一个图标文件 */
+.conn-note::before {
+    content: '!';
+    flex: none;
+    margin-top: 2px;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 12px;
+    line-height: 1;
+    color: #1a1206;
+    background: linear-gradient(180deg, var(--warn), #f59e0b);
+    box-shadow: 0 0 10px rgba(251, 191, 36, .55);
+}
+
+.conn-note .cn-body { flex: 1 1 auto; min-width: 0; }
+.conn-note b { font-size: 13px; letter-spacing: .2px; }
+.conn-note code {
+    font-family: Consolas, "SFMono-Regular", monospace;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(251, 191, 36, .18);
+    color: var(--warn-text);
+}
+
+@keyframes conn-note-pulse {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(251, 191, 36, .10), 0 10px 26px -18px rgba(251, 191, 36, .45); }
+    50%      { box-shadow: 0 0 0 1px rgba(251, 191, 36, .30), 0 10px 26px -16px rgba(251, 191, 36, .85); }
+}
+
+/* 亮色主题沿用既有惯例：把「发光」类装饰收一收，琥珀描边在白底上只会显脏 */
+[data-theme="light"] .conn-note { animation: none; box-shadow: none; }
+
+/* ---------- 台账分页 ---------- */
+.pager {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 2px 2px;
+    font-size: 12px;
+}
+/* 条数说明靠左，翻页按钮靠右：中间留白自动吃掉 */
+.pager .muted { margin-right: auto; }
+.pager button { padding: 5px 12px; font-size: 12px; }
+.pager button:disabled { opacity: .45; cursor: not-allowed; }
