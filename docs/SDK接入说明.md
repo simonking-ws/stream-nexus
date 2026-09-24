@@ -1,4 +1,4 @@
-# nexus-client
+# nexus-client SDK 接入说明
 
 `nexus-sse` / `nexus-websocket` 推送服务的**客户端 SDK**：一次 HTTP POST 或一条 TCP 长连接就能把消息推到浏览器，
 **完全不需要编写任何 SSE / Netty / WebSocket 服务端代码**。

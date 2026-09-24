@@ -22,7 +22,7 @@
 - **技术栈**：Spring Boot 4.1.1 / Java 17 / Spring MVC（`spring-boot-starter-webmvc`）+ Netty 4.2
 - **模块**：`nexus-common`（跨模块契约）+ `nexus-sse`（SSE 推送服务）+ `nexus-websocket`（WebSocket 推送服务）+ `nexus-client`（独立客户端 SDK）
 - **详细文档**：[SSE 使用说明](docs/SSE使用说明.md) · [WebSocket 使用说明](docs/WebSocket使用说明.md)
-- **客户端 SDK**：[nexus-client/README.md](nexus-client/README.md)
+- **客户端 SDK**：[SDK 接入说明](docs/SDK接入说明.md)
 
 ---
 
@@ -195,4 +195,4 @@ WebSocket 通道（`nexus-websocket`，端口 8089）示例正在优化中...
 
 - [SSE 使用说明](docs/SSE使用说明.md)
 - [WebSocket 使用说明](docs/WebSocket使用说明.md)
-- [nexus-client SDK 接入文档](nexus-client/README.md)
+- [`nexus-client` SDK 接入说明](docs/SDK接入说明.md)

@@ -85,7 +85,7 @@ PushResult result = client.wsPush(PushRequest.builder()
         .build());
 ```
 
-更多 SDK 用法见 [nexus-client/README.md](../nexus-client/README.md)。
+更多 SDK 用法见 [SDK 接入说明](SDK接入说明.md)。
 
 ---
 
