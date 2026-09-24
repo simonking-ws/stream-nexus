@@ -1,0 +1,52 @@
+# 单机一键起服务：在 nexus-websocket/ 下执行 docker compose up -d --build
+#
+# 注意：编排文件放在 nexus-websocket/ 下，但构建上下文必须是仓库根目录（context: ..），
+# 因为 nexus-websocket 的父 POM 在根目录且它依赖 nexus-common。
+#
+# 端口与 application.properties 保持一致：
+#   8089 HTTP（/admin 管理页、/console 测试页、POST /ws/push 推送入口）
+#   9090 Netty WebSocket（浏览器 / 移动端建长连接收消息）
+#   9091 Netty TCP（业务系统建长连接交消息）
+# 改端口同步改 SERVER_PORT / NEXUS_WS_WS_PORT / NEXUS_WS_TCP_PORT 与端口映射。
+# 配置项一律用环境变量覆盖（Spring 宽松绑定：
+# nexus.ws.connect-auth-enabled -> NEXUS_WS_CONNECT_AUTH_ENABLED）。
+
+services:
+  nexus-websocket:
+    build:
+      context: ..
+      dockerfile: nexus-websocket/Dockerfile
+    image: simonking/nexus-websocket:1.0.0
+    container_name: nexus-websocket
+    restart: unless-stopped
+    ports:
+      # 容器内端口由 SERVER_PORT / NEXUS_WS_WS_PORT / NEXUS_WS_TCP_PORT 决定，左边是宿主机端口
+      - "8089:8089"
+      - "9090:9090"
+      - "9091:9091"
+    environment:
+      TZ: Asia/Shanghai
+      JAVA_OPTS: "-XX:MaxRAMPercentage=75"
+      SERVER_PORT: 8089
+      NEXUS_WS_WS_PORT: 9090
+      NEXUS_WS_TCP_PORT: 9091
+      # 心跳与准入（与配置默认值一致，列出来方便直接改）
+      NEXUS_WS_HEARTBEAT_INTERVAL: 15s
+      NEXUS_WS_HEARTBEAT_TIMEOUT: 90s
+      NEXUS_WS_MAX_CONNECTIONS: 30000
+      NEXUS_WS_MAX_FRAME_LENGTH: 65536
+      # 推送鉴权：业务系统调 POST /ws/push 时校验 X-Ws-AppId + X-Ws-Key
+      NEXUS_WS_AUTH_ENABLED: "true"
+      # 建连鉴权默认关闭；打开后客户端握手必须带 token 查询参数（握手无法自定义请求头）
+      NEXUS_WS_CONNECT_AUTH_ENABLED: "false"
+      NEXUS_WS_CONNECT_AUTH_TOKEN: "U3RyZWFtTmV4dXM="
+      # 控制台页面拼接 ws:// 地址用；留空则取浏览器 hostname + 9090
+      NEXUS_WS_PUBLIC_ENDPOINT: ""
+
+# 注意：
+# 1. 上面的令牌是明文示例，生产请用 docker secret / 外部 env 文件挂载，别提交真实口令。
+# 2. 反向代理（Nginx）转发 WebSocket 时必须带上 Upgrade / Connection 头，否则握手会被降级成普通 HTTP：
+#      proxy_set_header Upgrade $http_upgrade;
+#      proxy_set_header Connection "upgrade";
+#      proxy_read_timeout 3600s;   # 长连接别被代理层掐断
+# 3. 9091 TCP 是裸 TCP 长连接（非 HTTP），反向代理无法按路径转发，需走四层转发（stream 模块）或直连。
