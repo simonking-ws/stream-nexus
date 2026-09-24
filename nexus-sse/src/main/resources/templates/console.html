@@ -41,6 +41,32 @@
         /* clientId 是服务端分配的 36 位 UUID，跟按钮挤在同一行会把整行顶换行：单独占一行 */
         .row-full { flex: 1 1 100%; min-width: 0; }
         #connTip { flex: 1 1 100%; }
+
+        /* hidden 属性必须显式兜底：公共主题里 .field / .grid 自带 display，
+           作者样式优先级高于 UA 的 [hidden]{display:none}，不补这条字段加了 hidden 照样显示 */
+        [hidden] { display: none !important; }
+
+        /* 事件标签：收起态描边胶囊，点亮后填品牌渐变。
+           描边 / 文字 / 选中态文字全部走主题变量——亮色主题会把它们换成深一档的值，
+           硬编码 rgba(148,163,184,.35) 这类浅描边在白底上会淡到看不见 */
+        .tagbar { display: flex; flex-wrap: wrap; gap: 8px; }
+        .tag {
+            font: inherit; font-size: 12px; line-height: 1;
+            padding: 7px 12px; border-radius: 999px; cursor: pointer;
+            color: var(--text-2); background: transparent;
+            border: 1px solid var(--glass);
+            transition: all .18s ease;
+        }
+        .tag:hover { border-color: var(--brand); color: var(--brand); }
+        .tag.on {
+            color: var(--on-brand);
+            background: linear-gradient(180deg, var(--brand), var(--brand-2));
+            border-color: transparent;
+            box-shadow: 0 0 10px var(--brand-soft);
+        }
+        .tag .x { margin-left: 6px; opacity: .6; }
+        .tag .x:hover { opacity: 1; }
+        .tag.on .x { opacity: .85; }   /* 选中态底是品牌渐变，× 太淡会看不出还能删 */
     </style>
 </head>
 <body>
@@ -62,7 +88,8 @@
 
 <div class="wrap">
     <!-- 订阅与推送拆成两个页签：两者互不依赖（可以先推后连，也可以只看订阅），
-         堆在一屏要来回滚动；收发日志留在页签外，订阅收到的消息与推送结果都往那儿落 -->
+         堆在一屏要来回滚动；收发日志只挂在订阅页签下——它记的是订阅连接的收发，
+         推送页签下没有连接，展示它只会让人误以为推送结果也要到那儿看 -->
     <div class="tabs">
         <button id="tabBtnSub" class="active" onclick="switchTab('sub')">订阅</button>
         <button id="tabBtnPush" onclick="switchTab('push')">推送</button>
@@ -71,19 +98,26 @@
     <div class="card" id="cardSub">
         <h3 class="card-title">订阅</h3>
         <p class="card-sub">一条连接可订阅多个模块，模块名须与推送侧 bizModule 完全一致（含大小写）</p>
+        <!-- 地址模式：默认走系统地址（地址框不出现，模块与令牌自动拼进地址）；
+             切到「自定义连接地址」用来测外部 SSE 链接——外部服务不认本服务的 modules 订阅
+             与建连令牌，这两个输入框填了也不会生效，故一并隐藏，避免误导 -->
+        <div class="field-row" style="margin-bottom:12px">
+            <button id="urlModeBtn" onclick="toggleUrlMode()">自定义连接地址</button>
+            <span class="muted" id="urlModeTip" style="font-size:12px"></span>
+        </div>
         <div class="grid">
-            <div class="field full">
-                <label>连接地址 <span class="hint">可编辑，点「连接」时以输入框内容为准（缺 modules 会自动补齐；clientId 由服务端分配，不在地址里）</span></label>
+            <div class="field full" id="fieldUrl" hidden>
+                <label>连接地址 <span class="hint">自定义地址：点「连接」时以输入框内容为准，可填外部 SSE 链接（clientId 由服务端分配，不在地址里）</span></label>
                 <div class="url-row">
                     <input type="text" id="subUrl" spellcheck="false">
-                    <button onclick="resetUrl()" title="恢复默认连接地址">重置</button>
+                    <button onclick="resetToSystemUrl()" title="丢弃手填地址，回到系统默认地址">重置</button>
                 </div>
             </div>
-            <div class="field">
+            <div class="field" id="fieldModules">
                 <label>订阅业务模块 <span class="hint">逗号分隔，留空默认 *（全局模块）；改动会同步进地址</span></label>
                 <input type="text" id="modules" value="test" oninput="syncModules()">
             </div>
-            <div class="field">
+            <div class="field" id="fieldToken">
                 <label>连接令牌 <span class="hint" th:text="${connectAuthEnabled} ? '服务端已开启建连鉴权，必填；会以 token 参数拼进地址' : '服务端开启建连鉴权时必填；会以 token 参数拼进地址'"></span></label>
                 <input type="text" id="connToken" oninput="syncToken()" th:placeholder="${connectAuthEnabled} ? '必填：缺少令牌将无法建连' : ''">
             </div>
@@ -139,9 +173,29 @@
         </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="cardLog">
         <h3 class="card-title">收发日志</h3>
         <p class="card-sub">心跳 PING 默认每 15s 一次，收到即回 PONG；不回会被判定失联并回收</p>
+        <!-- 事件监听做成标签：点一下即开关某条事件通道，已连接时动态摘挂，不必重连。
+             message 是 SSE 默认事件名（服务端不写 event: 行时走它），
+             外部 SSE 服务多数不带事件名，测外链主要靠它 -->
+        <div class="field" style="margin-bottom:10px">
+            <label>监听事件 <span class="hint">单选：默认 MESSAGE；外部 SSE 链接多数不带事件名，改用 message 或新增自定义事件</span></label>
+            <div class="tagbar" id="eventTags"></div>
+            <div class="field-row" style="margin-top:8px">
+                <input type="text" id="customEvent" spellcheck="false"
+                       placeholder="自定义事件名，如 order_update（大小写敏感）"
+                       onkeydown="if (event.key === 'Enter') addCustomEvent()">
+                <button onclick="addCustomEvent()">添加标签</button>
+            </div>
+        </div>
+        <!-- 清空日志紧跟在「添加标签」下方：都是这一片的操作区；
+             用 danger 样式（红字 + 红描边）与上面的监听配置区分开，避免误点 -->
+        <div class="row" style="margin:0 0 10px">
+            <button class="danger" id="logClear" onclick="clearLog()" title="清空当前日志，不影响连接与事件监听">清空日志</button>
+            <span class="muted" style="font-size:12px">只清显示，连接与事件监听不受影响</span>
+        </div>
+        <div id="eventsTip" class="muted" style="margin-bottom:10px"></div>
         <div id="log"></div>
     </div>
 </div>
@@ -166,8 +220,21 @@ let appList = [];     // 推送应用（appId / apiKey），来自 /sse/admin/ap
 // 协议常量：与服务端 SseConstants / SseEvent 一一对应，协议值改动需两端同步
 const SYS_MODULE = 'sse';   // 系统消息模块，业务路由不匹配即忽略
 const EVT_MESSAGE = 'MESSAGE';
+const EVT_MESSAGE_DEFAULT = 'message';   // SSE 默认事件名：服务端没带 event 字段时浏览器按它派发
 const EVT_PING = 'PING';
 const EVT_PONG = 'PONG';
+
+// 内置事件标签：MESSAGE 具名业务消息 / message 无名兜底，后者留给外部 SSE 链接备用
+// PING 不进标签：心跳必须一直听着并回 PONG，关掉就会被判定失联回收；也不进日志（15s 一条会刷屏）
+const BUILTIN_EVENTS = [EVT_MESSAGE, EVT_MESSAGE_DEFAULT];
+// 默认监听 MESSAGE：本服务每条消息都带 event 名（SseSender 必写），这条通道不会漏消息；
+// message / 自定义标签是接外部 SSE 链接时的备用通道——外部服务多数不带事件名，用时在页面上点开即可。
+// 不持久化：刷新即回到默认，避免上次的临时配置影响下一次排查
+const DEFAULT_EVENT = EVT_MESSAGE;
+
+let customEvents = [];                  // 自定义事件标签（可增删，仅当次会话有效）
+let activeEvent = DEFAULT_EVENT;        // 当前监听的事件名，单选；null = 一条通道都不听
+let eventHandlers = [];                 // 已挂载的 {name, fn}：换配置时要能精确摘掉，故存引用
 
 // 建连鉴权开启但没带令牌时的统一文案（连接前置校验与 onerror 兜底共用）
 const TOKEN_MISSING_TIP = '需要鉴权令牌：服务端已开启建连鉴权，请先填写「连接令牌」再连接';
@@ -180,15 +247,19 @@ function connTip(text, isErr) {
 }
 
 /**
- * 页签切换：订阅 / 推送二选一；收发日志在页签外，两个页签共用
+ * 页签切换：订阅 / 推送二选一
  *
  * <p>首次切到「推送」才拉应用列表——之后再切不重新拉，否则会把用户手动覆盖的
  * key 和已选中的应用冲掉。
+ *
+ * <p>收发日志随订阅页签显隐：它记的是订阅连接的收发，推送页签下没有连接，展示它没意义。
+ * 推送结果照样写进日志，切回订阅页签即可看到。
  */
 function switchTab(name) {
     const isSub = name === 'sub';
     document.getElementById('cardSub').hidden = !isSub;
     document.getElementById('cardPush').hidden = isSub;
+    document.getElementById('cardLog').hidden = !isSub;   // 推送页签不展示收发日志
     document.getElementById('tabBtnSub').className = isSub ? 'active' : '';
     document.getElementById('tabBtnPush').className = isSub ? '' : 'active';
     if (!isSub && appList.length === 0) loadApps();
@@ -207,6 +278,143 @@ function log(text, muted) {
     div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
     document.getElementById('log').prepend(div);
 }
+
+/** 清空收发日志：只清显示，不动画连接与事件监听配置 */
+function clearLog() {
+    document.getElementById('log').innerHTML = '';
+    log('日志已清空（连接与事件监听不受影响）', true);
+}
+
+/**
+ * 处理一条下行消息：MESSAGE / message / 自定义事件共用这一套逻辑
+ *
+ * <p>事件名只在不是 MESSAGE 时才打进日志——默认通道占绝大多数，
+ * 每条都带前缀会把日志刷成噪音；而 message / 自定义事件必须能一眼看出是从哪条通道进来的。
+ *
+ * @param raw SSE 的 data 原文
+ * @param evt 事件名（MESSAGE / message / 自定义）
+ */
+function handleMessage(raw, evt) {
+    let m;
+    try {
+        m = JSON.parse(raw);
+    } catch (e) {
+        // 解析失败也要落日志：否则「消息发出去了但页面没反应」时只剩控制台一行红字，极易被忽略
+        log(`[${evt}] 消息解析失败（非 JSON）：${raw}`);
+        return;
+    }
+    const prefix = evt === EVT_MESSAGE ? '' : `[${evt}] `;
+    if (m.bizModule === SYS_MODULE) {
+        // 建连回执里的 clientId：服务端分配，是心跳应答与定向推送的唯一依据
+        if (m.action === 'connected' && m.data && m.data.clientId) {
+            clientId = m.data.clientId;
+            document.getElementById('clientId').textContent = clientId;
+        }
+        log(prefix + '收到建连消息：' + JSON.stringify(m.data), true);
+        return;
+    }
+    const key = `${m.bizModule}:${m.action}`;
+    if (m.ts <= (lastTs[key] || 0)) return;   // 丢弃乱序 / 旧消息
+    lastTs[key] = m.ts;
+    const render = bizRoutes[key];
+    log(prefix + `${key} ${render ? render(m) : JSON.stringify(m.data)}`);
+}
+
+/**
+ * （重新）挂载消息监听：已连接时摘旧挂新，不必断开重连
+ *
+ * <p>只管业务消息通道——心跳 PING 常驻在 connect() 里，不受标签开关影响
+ */
+function syncEvents() {
+    if (!es) return;   // 未连接：下次 connect() 会按当前标签挂载
+    eventHandlers.forEach(h => es.removeEventListener(h.name, h.fn));
+    eventHandlers = [];
+    if (!activeEvent) return;   // 单选下全部取消：一条通道都不听
+    const name = activeEvent;   // 固定住本次挂载的事件名，避免后续切换串味
+    const fn = e => handleMessage(e.data, name);
+    es.addEventListener(name, fn);
+    eventHandlers.push({name, fn});
+}
+
+/** 渲染标签行：内置两个在前，自定义在后（自定义带 × 可删）；同一时刻最多一个点亮 */
+function renderEventTags() {
+    const box = document.getElementById('eventTags');
+    box.innerHTML = '';
+    [...BUILTIN_EVENTS, ...customEvents].forEach(name => {
+        const on = name === activeEvent;
+        const b = document.createElement('button');
+        b.className = 'tag' + (on ? ' on' : '');
+        b.textContent = name;
+        b.title = on
+            ? `正在监听 ${name}，点击取消`
+            : `点击切换为只监听 ${name}${name === EVT_MESSAGE_DEFAULT ? '（外部 SSE 服务多数走这条通道）' : ''}`;
+        if (customEvents.includes(name)) {
+            const x = document.createElement('span');
+            x.className = 'x';
+            x.textContent = '×';
+            x.title = '删除该自定义标签';
+            x.onclick = ev => {
+                ev.stopPropagation();   // 别触发外层标签的切换
+                removeCustomEvent(name);
+            };
+            b.appendChild(x);
+        }
+        b.onclick = () => toggleEvent(name);
+        box.appendChild(b);
+    });
+}
+
+/** 标签点击：单选——点谁就只听谁，再点一次当前监听的则取消 */
+function toggleEvent(name) {
+    activeEvent = activeEvent === name ? null : name;
+    renderEventTags();
+    syncEvents();
+    refreshEventsTip();
+    log(activeEvent ? '监听事件切换为：' + activeEvent : '已取消监听：不再接收任何下行消息', true);
+}
+
+/** 添加自定义事件标签：单选语义下「新增即选中」，之前选中的自动让位 */
+function addCustomEvent() {
+    const input = document.getElementById('customEvent');
+    const name = (input.value || '').trim();
+    if (name) {
+        const isNew = !customEvents.includes(name);
+        if (isNew) {
+            customEvents.push(name);
+        }
+        activeEvent = name;   // 无论新增还是已存在，都切到它（单选，其余自动熄灭）
+        syncEvents();
+        log((isNew ? '新增并监听事件：' : '监听事件切换为：') + name, true);
+    }
+    input.value = '';
+    renderEventTags();
+    refreshEventsTip();
+}
+
+/** 删除自定义标签：删的正是当前监听的那个时，回落到默认只监听 MESSAGE */
+function removeCustomEvent(name) {
+    const wasActive = activeEvent === name;
+    customEvents = customEvents.filter(n => n !== name);
+    if (wasActive) {
+        activeEvent = DEFAULT_EVENT;
+    }
+    renderEventTags();
+    syncEvents();
+    refreshEventsTip();
+    log('移除自定义事件：' + name + (wasActive ? '，已回落为只监听 ' + DEFAULT_EVENT : ''), true);
+}
+
+function refreshEventsTip() {
+    const el = document.getElementById('eventsTip');
+    if (!activeEvent) {
+        el.className = 'err';
+        el.textContent = '未监听任何事件：收不到下行消息（含建连回执，也就拿不到 clientId）';
+    } else {
+        el.className = 'muted';
+        el.textContent = '当前只监听：' + activeEvent + '（单选；心跳 PING 常驻监听，收到即回 PONG，不进日志）';
+    }
+}
+
 
 /**
  * 连接地址：默认拼自当前站点，可手改（如换端口 / 走网关域名）。
@@ -229,10 +437,16 @@ function currentUrl() {
 function resetUrl() {
     const u = currentUrl();
     u.searchParams.delete('clientId');   // 历史地址里可能残留，清掉避免误导
-    if (!u.searchParams.get('modules')) {
+    // 只有系统地址才补 modules：那是本服务的订阅约定，外部链接不认，硬塞会让人以为生效了
+    if (!useCustomUrl && !u.searchParams.get('modules')) {
         u.searchParams.set('modules', document.getElementById('modules').value);
     }
     document.getElementById('subUrl').value = u.toString();
+}
+
+/** 「重置」按钮：回到系统默认地址（自定义模式下即丢弃手填的外部地址） */
+function resetToSystemUrl() {
+    document.getElementById('subUrl').value = systemUrl().toString();
 }
 
 /** 订阅模块改动同步进地址（只改 modules 参数，保留手改的其余部分） */
@@ -265,11 +479,66 @@ function currentToken() {
     return (currentUrl().searchParams.get('token') || '').trim();
 }
 
+/**
+ * 连接地址是否指向外部站点：测外部 SSE 链接时，本服务的建连鉴权约定不适用，
+ * 令牌缺失提示与「401 令牌不正确」都会是误导（外部服务根本不认我们的令牌）
+ */
+function isExternal() {
+    try {
+        return new URL(document.getElementById('subUrl').value.trim()).origin !== location.origin;
+    } catch (e) {
+        return false;   // 地址不合法时按本站点处理，随后会回退到默认地址
+    }
+}
+
+/** 地址模式：false = 系统地址（默认）；true = 自定义地址（测外部 SSE 链接用） */
+let useCustomUrl = false;
+
+/** 系统默认地址：当前站点 + /sse/subscribe，带上订阅模块与建连令牌 */
+function systemUrl() {
+    const u = new URL(location.origin + '/sse/subscribe');
+    u.searchParams.set('modules', document.getElementById('modules').value);
+    const tk = document.getElementById('connToken').value.trim();
+    if (tk) {
+        u.searchParams.set('token', tk);
+    }
+    return u;   // clientId 由服务端建连时分配，不进地址
+}
+
+/**
+ * 应用当前地址模式（切换与首屏都走这里）
+ *
+ * <p>自定义地址是给外部 SSE 链接用的：外部服务不认本服务的 modules 订阅与建连令牌，
+ * 填了也不会生效，所以这两个输入框一并隐藏，避免「配了没反应」的误导。
+ */
+function applyUrlMode() {
+    document.getElementById('fieldUrl').hidden = !useCustomUrl;
+    document.getElementById('fieldModules').hidden = useCustomUrl;
+    document.getElementById('fieldToken').hidden = useCustomUrl;
+    const btn = document.getElementById('urlModeBtn');
+    btn.textContent = useCustomUrl ? '系统连接地址' : '自定义连接地址';
+    btn.className = useCustomUrl ? 'primary' : '';   // 自定义态用主色：提醒当前连的不是本站
+    document.getElementById('urlModeTip').textContent = useCustomUrl
+        ? '自定义：地址可手改，用来测外部 SSE 链接'
+        : '系统：' + location.origin + '/sse/subscribe（订阅模块与连接令牌自动拼进地址）';
+    // 两种模式都重拼一次：切到自定义时以系统地址为起点，切回系统时丢掉上一次手填的外部地址
+    document.getElementById('subUrl').value = systemUrl().toString();
+}
+
+/** 切换系统地址 / 自定义地址 */
+function toggleUrlMode() {
+    useCustomUrl = !useCustomUrl;
+    applyUrlMode();
+    log(useCustomUrl
+        ? '已切到自定义连接地址：订阅模块与连接令牌对外部链接不适用，已隐藏'
+        : '已切回系统连接地址：' + location.origin + '/sse/subscribe', true);
+}
+
 function connect() {
     if (es) return;
     // 开了建连鉴权却没带令牌：先拦住。否则 EventSource 只会拿到 401，
     // 而 onerror 拿不到状态码，页面表现为「一直重连中」，看不出是没有令牌
-    if (connectAuthEnabled() && !currentToken()) {
+    if (!isExternal() && connectAuthEnabled() && !currentToken()) {
         connTip(TOKEN_MISSING_TIP, true);
         log('连接失败：' + TOKEN_MISSING_TIP);
         document.getElementById('connToken').focus();
@@ -292,8 +561,9 @@ function connect() {
 
     es.onerror = () => {
         // 鉴权失败（令牌缺失 / 错误）服务端回 401，浏览器会自动重连且 onerror 拿不到状态码：
-        // 这里主动断开并提示原因，避免页面一直「重连中」却无人知道是令牌的问题
-        if (connectAuthEnabled()) {
+        // 这里主动断开并提示原因，避免页面一直「重连中」却无人知道是令牌的问题。
+        // 外部链接不认我们的令牌，这套判断不适用，交给浏览器自动重连即可
+        if (!isExternal() && connectAuthEnabled()) {
             es.close();
             es = null;
             setStatus('未授权', false);
@@ -310,27 +580,12 @@ function connect() {
         setStatus('重连中', false);
     };
 
-    // 业务消息（建连消息 sse/connected 也走这里）
-    es.addEventListener(EVT_MESSAGE, e => {
-        const m = JSON.parse(e.data);
-        if (m.bizModule === SYS_MODULE) {
-            // 建连回执里的 clientId：服务端分配，是心跳应答与定向推送的唯一依据
-            if (m.action === 'connected' && m.data && m.data.clientId) {
-                clientId = m.data.clientId;
-                document.getElementById('clientId').textContent = clientId;
-            }
-            log('收到建连消息：' + JSON.stringify(m.data), true);
-            return;
-        }
-        const key = `${m.bizModule}:${m.action}`;
-        if (m.ts <= (lastTs[key] || 0)) return;   // 丢弃乱序 / 旧消息
-        lastTs[key] = m.ts;
-        const render = bizRoutes[key];
-        log(`${key} ${render ? render(m) : JSON.stringify(m.data)}`);
-    });
+    // 业务消息（建连消息 sse/connected 也走这里）：按页签上的事件标签挂载，改动即时生效
+    syncEvents();
 
     // 心跳：服务端每 15s 下发一次 PING，收到立即回 PONG；
-    // 不回会被判定失联（默认 90s）并回收连接
+    // 不回会被判定失联（默认 90s）并回收连接。
+    // 常驻监听、不进标签也不进日志——关掉就会被回收，打日志则 15s 一条刷屏
     es.addEventListener(EVT_PING, () => pong());
 }
 
@@ -357,6 +612,7 @@ function disconnect() {
     if (!es) return;
     es.close();
     es = null;
+    eventHandlers = [];   // es 已丢弃，handler 引用随之作废
     setStatus('已断开', false);
     // 断开即失效：下次建连服务端会重新分配一个 clientId
     clientId = null;
@@ -448,11 +704,12 @@ function push() {
     }).then(r => r.json()).then(r => log('推送结果：' + JSON.stringify(r), true));
 }
 
-// 初始地址：当前站点 + /sse/subscribe（clientId 由服务端建连时分配，不进地址）
-document.getElementById('subUrl').value =
-    location.origin + '/sse/subscribe?modules=' + encodeURIComponent(document.getElementById('modules').value);
-resetUrl();
+// 初始地址模式：系统地址（地址框隐藏，模块与令牌拼进地址），首屏不往日志里写
+applyUrlMode();
 loadApps();
+// 事件标签：默认选中 MESSAGE，message / 自定义标签是外部链接的备用通道；只渲染与提示，不往日志里写
+renderEventTags();
+refreshEventsTip();
 </script>
 </body>
 </html>

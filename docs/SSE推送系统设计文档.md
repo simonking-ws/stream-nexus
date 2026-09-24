@@ -265,10 +265,10 @@ nexus.sse.max-connections=30000         # 准入
 nexus.sse.auth-enabled=true             # 推送鉴权（谁能推）
 nexus.sse.connect-auth-enabled=false    # 建连鉴权（谁能连），默认关闭
 nexus.sse.connect-auth-token=xxx        # 建连令牌，开启后必填；留空则一律拒绝
-nexus.sse.app-store-path=data/push-apps.json  # 推送应用台账落盘位置（首次启动播种 test-demo / c3RyZWFtLW5leHVz）
+nexus.sse.app-store-path=data/push-apps.json  # 推送应用台账落盘位置（相对模块根目录 nexus-sse；首次启动播种 test-demo / c3RyZWFtLW5leHVz）
 ```
 
-> 推送应用不在配置里：内置 `test-demo` / `c3RyZWFtLW5leHVz`（白名单 `test`，整条只读：不可改、不可删；升级前台账里的旧内置应用 `test` / `test_secret` 会在启动时自动摘除），其余在管理页运行时增删，并落盘到 `nexus.sse.app-store-path`（重启后仍在）。该文件含**明文 apiKey**，不要入库（已 gitignore）、部署时注意文件权限；多实例部署需各指向独立文件或换成共享存储实现 `PushAppStore`。
+> 推送应用不在配置里：内置 `test-demo` / `c3RyZWFtLW5leHVz`（白名单 `test`，整条只读：不可改、不可删；升级前台账里的旧内置应用 `test` / `test_secret` 会在启动时自动摘除），其余在管理页运行时增删，并落盘到 `nexus.sse.app-store-path`（重启后仍在；相对路径以**模块根目录** nexus-sse 为基准，不以启动工作目录为基准，从仓库根启动也不会写到仓库根的 `data/`）。该文件含**明文 apiKey**，不要入库（已 gitignore）、部署时注意文件权限；多实例部署需各指向独立文件或换成共享存储实现 `PushAppStore`。
 
 > 跨域：全局内置于 `WebMvcConfig#addCorsMappings`（`/**`，源/方法/头/凭证全量放行，无配置项）；
 > `allowedOriginPatterns("*")` 是凭证模式下的唯一可行写法。

@@ -124,7 +124,7 @@ registry.addMapping("/**")
 `curl -X PUT http://localhost:8088/sse/admin/apps/{appId} -d '{"allowedModules":["test","order"]}'`（改模块白名单，apiKey 留空表示不改）、
 `curl -X DELETE http://localhost:8088/sse/admin/apps/{appId}`。
 
-> 内置默认应用为 `test-demo` / `c3RyZWFtLW5leHVz`（白名单 `test`），开箱即用且**整条只读**：始终存在，appId / apiKey / 白名单 都不可改、不可删除，要别的凭证请在管理页新建。管理页新增的应用会落盘到 `nexus.sse.app-store-path`（默认 `data/push-apps.json`），**重启后仍在**。
+> 内置默认应用为 `test-demo` / `c3RyZWFtLW5leHVz`（白名单 `test`），开箱即用且**整条只读**：始终存在，appId / apiKey / 白名单 都不可改、不可删除，要别的凭证请在管理页新建。管理页新增的应用会落盘到 `nexus.sse.app-store-path`（默认 `data/push-apps.json`，相对**模块根目录**，即 `nexus-sse/data/push-apps.json`，不受启动工作目录影响），**重启后仍在**。
 
 ## 四、消息协议
 
@@ -286,7 +286,7 @@ restClient.post()
 
 **三套鉴权互不干涉**：`auth-enabled` 管「谁能推」、`connect-auth-enabled` 管「谁能连」、`nexus.sse.admin.*` 管「谁能打开运维页面」。登录只守 `/admin`、`/console`、`/sse/admin/**`，`/sse/subscribe` 与 `/sse/push` 不走登录态。运维接口未登录返回 401 JSON，页面未登录 302 到 `/login`（带回跳地址）。
 
-**推送应用不在这里配置**：内置默认应用 `test-demo` / `c3RyZWFtLW5leHVz`（白名单 `test`，开箱即用且**只读**：不可改、不可删），其余应用在管理页「推送应用（appId / key）」页签运行时增删改（apiKey 可自动生成：GUID → Base64），改动经 `nexus.sse.app-store-path`（默认 `data/push-apps.json`）落盘，**重启后仍在**。
+**推送应用不在这里配置**：内置默认应用 `test-demo` / `c3RyZWFtLW5leHVz`（白名单 `test`，开箱即用且**只读**：不可改、不可删），其余应用在管理页「推送应用（appId / key）」页签运行时增删改（apiKey 可自动生成：GUID → Base64），改动经 `nexus.sse.app-store-path`（默认 `data/push-apps.json`，相对**模块根目录**）落盘，**重启后仍在**。
 
 反向代理（Nginx）下必须关闭缓冲，否则消息会攒在缓冲区不下发：
 
