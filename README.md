@@ -2,7 +2,12 @@
   <img src="images/icon.png" alt="Stream-Nexus" width="120"/>
 </p>
 
-<h1 align="center">Stream-Nexus</h1>
+<h1 align="center">Stream-Nexus · 流枢</h1>
+
+<p align="center">
+<strong>Stream-Nexus</strong> = Stream（流式数据）+ Nexus（连接枢纽），即<strong>流枢</strong>：
+一个让消息以流的形式持续流动、由中心枢纽统一调度和路由的推送系统。
+</p>
 
 <p align="center">
 一个<strong>轻量级实时推送服务</strong>集合：服务端负责连接管理、按业务模块路由与消息扇出，业务系统只管把消息灌进来。
