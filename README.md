@@ -196,6 +196,65 @@ WebSocket 通道（`nexus-websocket`，端口 8089）示例正在优化中...
 3. 打开 WebSocket 测试页 `http://localhost:8089/console`，同样点击「连接」并「推送」。
 4. 观察日志每 15s 收到一次 `PING`，客户端回 `PONG`。
 
+---
+
+## 业务系统接入（`nexus-client` SDK）
+
+业务系统**不需要写任何 SSE / Netty / WebSocket 服务端代码**：引入 SDK，一次 HTTP POST 把消息交给推送服务，
+由它扇出到终端。
+
+### 引入
+
+```xml
+<dependency>
+    <groupId>com.simonking.nexus</groupId>
+    <artifactId>nexus-client</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+> SDK 与 `nexus-common` 都按 **Java 8** 出包（老系统可直接引入），运行期依赖只有 Netty、okhttp、Jackson 与 slf4j；
+> 其中 okhttp 仅 REST 通道需要，是 optional 的。
+
+### 推送（REST，推荐）
+
+```java
+// 1. 构造：两个服务各一组「地址 + 鉴权」，用哪个填哪个（只推 SSE 就可以不写 ws*）
+NexusRestClient client = NexusRestClient.builder()
+        .sseBaseUrl("http://10.0.0.8:8088").sseAppId("order-service").sseApiKey("sse-key")
+        .wsBaseUrl("http://10.0.0.8:8089").wsAppId("order-service").wsApiKey("ws-key")
+        .build();
+
+// 2. 推：按终端类型挑方法，一次 HTTP POST，同步拿回执
+Map<String, Object> data = new HashMap<>();
+data.put("orderId", 1001);
+data.put("amount", 99.9);
+PushRequest request = PushRequest.builder().bizModule("order").action("CREATE").data(data).build();
+
+PushResult sseResult = client.ssePush(request);   // 推给 SSE 终端（POST /sse/push）
+PushResult wsResult = client.wsPush(request);     // 推给 WebSocket 终端（POST /ws/push）
+System.out.println("命中 " + wsResult.getTotal() + " 条，成功 " + wsResult.getSuccess() + " 条");
+
+// 3. 应用退出时释放（停调度线程、清连接池）
+client.close();
+```
+
+要点：
+
+- **两个方法各打一个服务**：SSE 与 WebSocket 是两套独立部署的服务（8088 / 8089），各持一张连接注册表和
+  一张推送应用表，终端也不会同时挂在两边，因此不合并成一个 `push()`。
+- **同步拿回执**：返回值就是服务端的 `messageId / total / success / failed`——推没推到人当场就知道，
+  不用另开回执通道。`total=0` 表示推成功了但没人在线，与「没推成功」是两回事。
+- **失败即抛 `PushException`**：401 凭证不对 / 403 模块越权 / 400 报文缺字段 / 连不上与超时，
+  消息里带通道 + 状态码 + 响应体（截断到 512 字符）。要不要重试只有业务知道，SDK 不做回调、不返回 null。
+- **鉴权必填**：分别走 `X-Sse-AppId` + `X-Sse-Key` 与 `X-Ws-AppId` + `X-Ws-Key`；builder 默认值是两个服务
+  内置的 `test / test_secret`（开箱即用），**生产务必换成管理页「推送应用」页签下发的应用**。
+- **寻址**：`bizModule` 按模块广播（首选，终端重连后依然可达），`clientIds` 定向（clientId 重连即换，
+  需终端重新上报），两者可同时填，命中并集。
+- **高频场景换 TCP**：`NexusTcpClient` 一条长连接复用、发后不管，仅 WebSocket 服务提供（端口 9091）。
+
+builder 全量参数、TCP 通道细节、Spring 集成示例见 [SDK 接入说明](docs/SDK接入说明.md)。
+
 更详细的接口说明、配置项、部署方式、浏览器接入示例，请查看：
 
 - [SSE 使用说明](docs/SSE使用说明.md)
