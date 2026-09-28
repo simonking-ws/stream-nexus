@@ -94,7 +94,7 @@
             border-radius: 9px;
             border: 1px solid rgba(251, 113, 133, .35);
             background: rgba(251, 113, 133, .1);
-            color: #fda4af;
+            color: var(--danger-text);
             font-size: 12px;
         }
         .login-tip { margin: 14px 0 0; font-size: 11px; }
@@ -137,7 +137,7 @@
         <span class="logo"><img class="logo-img" th:src="@{/images/logo.png}" alt="N" /></span>
         <span class="brand-text">Stream Nexus</span>
         <!-- 服务标识：图标统一后靠它区分两个服务，避免开着两个页面认不出自己在哪 -->
-        <span class="svc-tag">SSE</span>
+        <span class="svc-tag">WebSocket</span>
     </div>
     <div class="nav"></div>
     <div class="meta">
@@ -165,7 +165,7 @@
             <button class="primary" type="submit">登录</button>
         </form>
 
-        <p class="muted login-tip">账号 / 口令由 nexus.sse.admin.username、nexus.sse.admin.password 配置。</p>
+        <p class="muted login-tip">账号 / 口令由 nexus.ws.admin.username、nexus.ws.admin.password 配置。</p>
     </div>
 </div>
 

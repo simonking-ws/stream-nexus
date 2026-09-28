@@ -229,6 +229,29 @@ body {
     box-shadow: 0 0 18px rgba(34, 211, 238, .45);
 }
 
+/* 品牌图标：项目 logo 落在徽章中心，四周留一圈渐变边；
+   contain 而非 cover——图标外圈的连线节点不能被裁掉 */
+.logo-img {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    object-fit: contain;
+    display: block;
+}
+
+/* 服务标识：logo 换成项目图标后，靠它区分 SSE / WebSocket 两套服务 */
+.svc-tag {
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(94, 210, 255, .45);
+    background: rgba(34, 211, 238, .12);
+    color: var(--brand);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .6px;
+    line-height: 1.5;
+}
+
 /* 外圈旋转光环 */
 .logo::after {
     content: '';

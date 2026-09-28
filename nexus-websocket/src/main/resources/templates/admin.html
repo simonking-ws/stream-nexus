@@ -6,6 +6,22 @@
     <title th:text="${title}">WebSocket 连接管理</title>
     <meta name="color-scheme" content="dark">
     <link rel="stylesheet" th:href="@{/css/nexus-tech.css}">
+    <script>
+        /* 主题必须在渲染前落地：nexus-tech.js 在 body 末尾，等它跑会先闪一帧深色。
+           这里只做「读取 + 打属性」，不碰 DOM 其余部分；按钮由 nexus-tech.js 挂载 */
+        (function () {
+            try {
+                // 默认深色（本项目的视觉基线），只有手动切换过才记在 localStorage
+                var t = localStorage.getItem('nexus-theme');
+                if (t !== 'light' && t !== 'dark') t = 'dark';
+                document.documentElement.setAttribute('data-theme', t);
+                var m = document.querySelector('meta[name="color-scheme"]');
+                if (m) m.setAttribute('content', t === 'light' ? 'light' : 'dark');
+            } catch (e) {
+                // 存储不可用时保持默认深色，不影响后续使用
+            }
+        })();
+    </script>
     <style>
         /* 管理页私有补充：公共科技感主题（深色 / 霓虹 / 动效）见 /css/nexus-tech.css */
         .toolbar label { font-size: 12px; }
@@ -17,7 +33,12 @@
 <body>
 
 <div class="topbar">
-    <div class="brand"><span class="logo">WS</span> <span class="brand-text">Stream Nexus</span></div>
+    <div class="brand">
+        <span class="logo"><img class="logo-img" th:src="@{/images/logo.png}" alt="N" /></span>
+        <span class="brand-text">Stream Nexus</span>
+        <!-- 服务标识：图标统一后靠它区分两个服务，避免开着两个页面认不出自己在哪 -->
+        <span class="svc-tag">WebSocket</span>
+    </div>
     <div class="nav">
         <a th:href="@{/admin}" th:classappend="${active == 'admin'} ? 'active' : ''">连接管理</a>
         <!-- 推送测试新开标签页：管理页和它经常要对着看（一边看连接台账一边推消息） -->
@@ -27,6 +48,7 @@
     <div class="meta">
         <span class="live"><i></i>LIVE</span>
         <span th:text="'心跳 ' + ${heartbeatInterval} + 's · 失联判定 ' + ${heartbeatTimeout} + 's · 连接上限 ' + ${maxConnections} + ' · WS ' + ${wsPort}"></span>
+        <a class="logout" th:href="@{/logout}" title="退出登录：清空会话并回到登录页">退出</a>
     </div>
 </div>
 
@@ -47,6 +69,11 @@
                 <div class="stat">
                     <div class="label">疑似失联</div>
                     <div class="num" id="staleCount">-</div>
+                </div>
+                <div class="stat">
+                    <!-- 心跳超时：台账判定「疑似失联」的阈值，服务端下发，页面不写死 -->
+                    <div class="label">心跳超时</div>
+                    <div class="num" id="hbTimeout">-</div>
                 </div>
                 <div class="stat">
                     <div class="label">项目运行</div>
@@ -73,15 +100,16 @@
                 </select>
             </label>
             <label>排序
-                <select id="sort" onchange="render()">
+                <select id="sort" onchange="onFilterChange()">
                     <option value="createTime">建连时间（新→旧）</option>
                     <option value="silence">静默时长（长→短）</option>
                     <option value="clientId">客户端ID</option>
                 </select>
             </label>
-            <input type="text" id="keyword" placeholder="过滤 客户端ID / IP / 订阅模块" oninput="render()" style="width:240px">
+            <input type="text" id="keyword" placeholder="过滤 客户端ID / IP / 城市 / 订阅模块"
+                   oninput="onFilterChange()" style="width:240px">
             <label style="display:flex;align-items:center;gap:6px">
-                <input type="checkbox" id="staleOnly" onchange="render()"> 只看疑似失联
+                <input type="checkbox" id="staleOnly" onchange="onFilterChange()"> 只看疑似失联
             </label>
             <span id="tip" style="color:var(--muted);font-size:12px"></span>
         </div>
@@ -91,18 +119,19 @@
                 <thead>
                 <tr>
                     <th style="width:22%">客户端ID</th>
-                    <th style="width:11%">客户端 IP</th>
-                    <th style="width:14%">订阅模块</th>
-                    <th style="width:11%">建连时间</th>
-                    <th style="width:11%">最近心跳</th>
-                    <th style="width:12%">静默 / 状态</th>
-                    <th style="width:11%">上行 / 下行</th>
-                    <th style="width:8%">操作</th>
+                    <th style="width:13%">客户端 IP</th>
+                    <th style="width:15%">订阅模块</th>
+                    <th style="width:14%">建连时间</th>
+                    <th style="width:14%">静默 / 状态</th>
+                    <th style="width:10%">上行 / 下行</th>
+                    <th style="width:12%">操作</th>
                 </tr>
                 </thead>
                 <tbody id="tbody"></tbody>
             </table>
             <div class="empty" id="empty" hidden>暂无连接</div>
+            <!-- 分页：过滤后超过 10 条才出现 -->
+            <div class="pager" id="pager" hidden></div>
         </div>
     </div>
 
@@ -136,9 +165,8 @@
 
         <div class="card">
             <h3 class="card-title">应用列表</h3>
-            <p class="card-sub">
-                /ws/admin/apps · 新增 / 修改 / 删除仅改内存，重启回到内置默认应用；删除后该 appId 的推送立即鉴权失败
-            </p>
+            <p class="card-sub">/ws/admin/apps · 列表默认只读，点「修改」才进入编辑；apiKey 点「复制」即可拷贝。内置默认应用 test-demo 整条只读：始终存在，appId / apiKey / 白名单 都不可改、不可删除，服务端对它一律返回 409，要别的凭证请新建应用</p>
+            <p class="card-sub" id="appStorePath" style="color:var(--muted)"></p>
             <div class="table-wrap">
                 <table>
                     <thead>
@@ -170,11 +198,17 @@
 <script th:src="@{/js/nexus-tech.js}"></script>
 <script>
     /* ================= 全局状态 ================= */
-    let items = [], apps = [], meta = {};
+    let items = [], apps = [], meta = {}, defaultAppId = '';
+    // 当前处于编辑态的 appId：列表默认只读，只有点「修改」后才对这一行开启输入框
+    let editingAppId = '';
     let knownIds = null;
     let serverSkew = 0;
     let prevTotal = null;
     let timer = null;
+    // 台账分页：过滤后超过 PAGE_SIZE 条才出分页条。
+    // 自动刷新保持当前页（盯着第 3 页看时不该被刷新踢回第 1 页），只有筛选条件变了才重置
+    let page = 1;
+    const PAGE_SIZE = 10;
 
     const $ = id => document.getElementById(id);
 
@@ -190,19 +224,38 @@
         if (window.NexusFX) NexusFX.countTo(el, value); else el.textContent = value;
     }
 
-    function fmtTime(ts) {
+    /**
+     * 建连时间用完整日期时间：只给「时:分:秒」看不出是哪天连的——长连接挂几天很常见，
+     * 而「昨天连的」和「刚刚连的」在排查时是两回事
+     */
+    function fmtDateTime(ts) {
         if (!ts) return '-';
-        return new Date(ts).toLocaleTimeString('zh-CN', {hour12: false});
+        return new Date(ts).toLocaleString('zh-CN', {hour12: false});
     }
 
+    /** 区间时长：给「静默时长」「心跳超时」这类阈值用，读的是人话（1 分 30 秒） */
+    function duration(ms) {
+        // 时钟回拨等极端情况会算出负数，统一归零
+        const s = Math.max(Math.floor(ms / 1000), 0);
+        if (s < 60) return s + ' 秒';
+        if (s < 3600) return Math.floor(s / 60) + ' 分 ' + (s % 60) + ' 秒';
+        const h = Math.floor(s / 3600);
+        // 超过一天换成「天 + 小时」：25 时 0 分 这种数读不懂
+        if (h < 24) return h + ' 时 ' + Math.floor(s % 3600 / 60) + ' 分';
+        return Math.floor(h / 24) + ' 天 ' + (h % 24) + ' 小时';
+    }
+
+    /** 项目运行时间专用：始终 00:00:00 的读秒格式，配合 1 秒定时器做时钟效果 */
     function durationSec(ms) {
-        const s = Math.floor(ms / 1000);
-        const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600),
-            m = Math.floor(s % 3600 / 60), sec = s % 60;
-        if (d > 0) return d + '天' + h + '时';
-        if (h > 0) return h + '时' + m + '分';
-        if (m > 0) return m + '分' + sec + '秒';
-        return sec + '秒';
+        const s = Math.max(Math.floor(ms / 1000), 0);
+        const d = Math.floor(s / 86400);
+        const h = Math.floor(s % 86400 / 3600);
+        const m = Math.floor(s % 3600 / 60);
+        const sec = s % 60;
+
+        // 数字等宽（.num 已开 tabular-nums），跳秒时不会左右抖
+        const clock = [h, m, sec].map(v => String(v).padStart(2, '0')).join(':');
+        return d > 0 ? d + ' 天 ' + clock : clock;
     }
 
     /** 本机访问：服务端已把 ::1 归一化成 127.0.0.1，这里兼容一下旧连接的原始值 */
@@ -236,10 +289,19 @@
     async function loadApps() {
         try {
             const resp = await fetch('/ws/admin/apps');
-            apps = (await resp.json()).items || [];
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const data = await resp.json();
+            apps = data.items || [];
+            defaultAppId = data.defaultAppId || '';
+            // 正在编辑的行若已被别处删掉，退出编辑态，避免残留输入框指向不存在的应用
+            if (editingAppId && !apps.some(a => a.appId === editingAppId)) editingAppId = '';
+            // 台账文件位置由服务端下发：改完东西知道落在哪，也顺带说明「重启还在」
+            $('appStorePath').textContent =
+                data.storePath ? '台账文件：' + data.storePath + '（重启后自动读回）' : '';
+            setTip('appTip', '');
             renderApps();
         } catch (e) {
-            setTip('appTip', '拉取失败：' + e.message, true);
+            setTip('appTip', '应用列表拉取失败：' + e.message, true);
         }
     }
 
@@ -260,7 +322,25 @@
         if (!kw) return true;
         return (it.clientId || '').toLowerCase().includes(kw)
             || (it.ip || '').toLowerCase().includes(kw)
+            // 归属地：缺库时服务端下发 '-'，参与匹配只会把 '-' 当成关键字误中，故跳过占位值
+            || (it.city && it.city !== '-' && it.city.toLowerCase().includes(kw))
             || (it.modules || []).join(',').toLowerCase().includes(kw);
+    }
+
+    /** 归属地文本：缺 IP 库时服务端下发 '-'，那是占位不是城市，展示时按没有处理 */
+    function cityOf(it) {
+        return (it.city && it.city !== '-') ? it.city : '';
+    }
+
+    /** 筛选条件变了要回第 1 页：停在第 5 页时改个关键字，结果可能只剩 3 条 */
+    function onFilterChange() {
+        page = 1;
+        render();
+    }
+
+    function gotoPage(p) {
+        page = Math.max(1, p);
+        render();
     }
 
     function render() {
@@ -281,6 +361,9 @@
         setNum('staleCount', stale);
         staleEl.className = 'num' + (stale > 0 ? ' warn' : '');
 
+        // 判失联的阈值由服务端下发：改了 heartbeat-timeout 页面立刻跟着变，不用改前端
+        $('hbTimeout').textContent = meta.heartbeatTimeout ? duration(meta.heartbeatTimeout) : '-';
+
         // 模块分布
         const chips = $('moduleChips');
         chips.innerHTML = '';
@@ -296,11 +379,19 @@
             });
         }
 
+        // 分页按「过滤后」的条数算：指标卡上的 total 是服务端在线总数，与翻页无关
+        const filtered = list.length;
+        const pages = Math.max(Math.ceil(filtered / PAGE_SIZE), 1);
+        // 自动刷新时连接可能被回收，当前页会越界（原在第 5 页，现在只剩 2 页）→ 往回退
+        if (page > pages) page = pages;
+        const start = (page - 1) * PAGE_SIZE;
+        const pageItems = list.slice(start, start + PAGE_SIZE);
+
         const tbody = $('tbody');
         tbody.innerHTML = '';
-        $('empty').hidden = list.length > 0;
+        $('empty').hidden = pageItems.length > 0;
         const firstPaint = knownIds === null;
-        list.forEach((it, idx) => {
+        pageItems.forEach((it, idx) => {
             const tr = document.createElement('tr');
             if (firstPaint) {
                 tr.className = 'row-new';
@@ -308,14 +399,19 @@
             } else if (!knownIds.has(it.clientId)) {
                 tr.className = 'row-new';
             }
+            // IP 下方补归属地：本机标「本机」（一眼分清是自己调试还是外部客户端连进来的），
+            // 其余显示城市；缺 IP 库时服务端下发 '-'，那就什么都不补
+            const city = cityOf(it);
             tr.innerHTML =
                 '<td><div class="cid">' + esc(it.clientId) + '</div></td>' +
                 '<td><div class="cid">' + esc(it.ip) + '</div>' +
-                (isLocalIp(it.ip) ? '<div class="sub">本机</div>' : '') + '</td>' +
+                (isLocalIp(it.ip) ? '<div class="sub">本机</div>'
+                    : (city ? '<div class="sub">' + esc(city) + '</div>' : '')) + '</td>' +
                 '<td>' + (it.modules || []).map(m => '<span class="chip' + (m === '*' ? ' global' : '') + '">' + esc(m) + '</span>').join(' ') + '</td>' +
-                '<td>' + fmtTime(it.createTime) + '</td>' +
-                '<td>' + fmtTime(it.lastPongTime) + '</td>' +
-                '<td>' + durationSec(it.silence) +
+                // 建连时间下补一行在线时长：光看时刻看不出这条长连接已经挂了多久
+                '<td>' + fmtDateTime(it.createTime) +
+                '<div class="sub">在线 ' + duration(it.online ?? 0) + '</div></td>' +
+                '<td>' + duration(it.silence) +
                 ' <span class="badge ' + (it.stale ? 'stale' : 'ok') + '">' + (it.stale ? '失联' : '在线') + '</span></td>' +
                 '<td class="sub">' + it.uplinkCount + ' / ' + it.downlinkCount + '</td>' +
                 '<td><button class="danger" data-kick="' + esc(it.clientId) + '">下线</button></td>';
@@ -324,26 +420,173 @@
         tbody.querySelectorAll('[data-kick]').forEach(btn =>
             btn.onclick = () => kick(btn.dataset.kick, btn));
         knownIds = new Set(items.map(it => it.clientId));
+        renderPager(filtered, pages);
     }
 
+    /**
+     * 分页条：只有一页时整条隐藏——多数时候连接数不多，挂一排禁用按钮纯属噪音
+     */
+    function renderPager(count, pages) {
+        const pager = $('pager');
+        pager.hidden = pages <= 1;
+        pager.innerHTML = '';
+        if (pages <= 1) return;
+
+        const info = document.createElement('span');
+        info.className = 'muted';
+        info.textContent = '共 ' + count + ' 条 · 第 ' + page + '/' + pages + ' 页';
+        pager.appendChild(info);
+
+        pager.appendChild(pagerBtn('« 首页', () => gotoPage(1), page === 1));
+        pager.appendChild(pagerBtn('上一页', () => gotoPage(page - 1), page === 1));
+        pager.appendChild(pagerBtn('下一页', () => gotoPage(page + 1), page === pages));
+        pager.appendChild(pagerBtn('末页 »', () => gotoPage(pages), page === pages));
+    }
+
+    function pagerBtn(text, onclick, disabled) {
+        const b = document.createElement('button');
+        b.textContent = text;
+        b.disabled = !!disabled;
+        b.onclick = onclick;
+        return b;
+    }
+
+    /**
+     * 应用列表：默认只读，只有点「修改」的那一行才变成输入框（同一时刻仅一行在编辑）。
+     *
+     * <p>内置默认应用永不可编辑：不给「修改 / 删除」，也不给输入框——它始终存在且凭证写死在
+     * 服务端常量里，改了等于把本地联调与文档的基准改掉。要别的凭证就新建应用。
+     */
     function renderApps() {
         const tbody = $('appBody');
         tbody.innerHTML = '';
         $('appEmpty').hidden = apps.length > 0;
         apps.forEach(app => {
+            const editing = app.appId === editingAppId;
+            const builtIn = app.appId === defaultAppId;
             const tr = document.createElement('tr');
-            tr.innerHTML =
-                '<td class="cid">' + esc(app.appId) + '</td>' +
-                '<td class="key-cell"><input type="text" class="app-key" value="' + esc(app.apiKey) + '"></td>' +
-                '<td><input type="text" class="app-modules" value="' + esc((app.allowedModules || []).join(',')) + '"></td>' +
-                '<td><button class="link" data-save="' + esc(app.appId) + '">保存</button> ' +
-                '<button class="danger" data-del="' + esc(app.appId) + '">删除</button></td>';
+
+            // appId：主键，任何情况下都不可改（PUT 的路径才是定位用的 appId）
+            const idTd = document.createElement('td');
+            const idText = document.createElement('div');
+            idText.className = 'cid';
+            idText.textContent = app.appId;
+            idTd.appendChild(idText);
+            if (builtIn) {
+                const badge = document.createElement('span');
+                badge.className = 'badge default';
+                badge.textContent = '内置默认';
+                badge.style.display = 'inline-block';
+                badge.style.marginTop = '4px';
+                idTd.appendChild(badge);
+            }
+            tr.appendChild(idTd);
+
+            // apiKey：编辑态 → 输入框（留空 = 不修改）；只读态 → 明文 + 「复制」
+            const keyTd = document.createElement('td');
+            if (editing) {
+                keyTd.appendChild(editInput('editApiKey', app.apiKey, '留空 = 不修改'));
+            } else {
+                const keyCell = document.createElement('div');
+                keyCell.className = 'key-cell';
+                const keyText = document.createElement('span');
+                keyText.className = 'cid';
+                keyText.textContent = app.apiKey;
+                keyCell.appendChild(keyText);
+                const copy = document.createElement('button');
+                copy.className = 'link';
+                copy.textContent = '复制';
+                copy.onclick = () => copyKey(app.apiKey, copy);
+                keyCell.appendChild(copy);
+                keyTd.appendChild(keyCell);
+            }
+            tr.appendChild(keyTd);
+
+            // 模块白名单：编辑态 → 输入框（留空 = *）；只读态 → chip
+            const modsTd = document.createElement('td');
+            if (editing) {
+                modsTd.appendChild(editInput('editModules', (app.allowedModules || []).join(','), '留空 = 不限制（*）'));
+            } else {
+                (app.allowedModules || []).forEach(m => {
+                    const span = document.createElement('span');
+                    span.className = 'chip' + (m === '*' ? ' global' : '');
+                    span.style.marginRight = '4px';
+                    span.textContent = m;
+                    modsTd.appendChild(span);
+                });
+            }
+            tr.appendChild(modsTd);
+
+            const op = document.createElement('td');
+            if (editing) {
+                const save = document.createElement('button');
+                save.className = 'primary';
+                save.textContent = '保存';
+                save.onclick = () => saveEdit(app.appId, save);
+                op.appendChild(save);
+                const cancel = document.createElement('button');
+                cancel.textContent = '取消';
+                cancel.style.marginLeft = '6px';
+                cancel.onclick = cancelEdit;
+                op.appendChild(cancel);
+            } else if (builtIn) {
+                // 内置默认应用整条只读，服务端对它一律 409
+                const forbid = document.createElement('span');
+                forbid.className = 'sub';
+                forbid.textContent = '内置默认 · 只读';
+                op.appendChild(forbid);
+            } else {
+                const edit = document.createElement('button');
+                edit.textContent = '修改';
+                edit.onclick = () => startEdit(app.appId);
+                op.appendChild(edit);
+                const del = document.createElement('button');
+                del.className = 'danger';
+                del.textContent = '删除';
+                del.style.marginLeft = '6px';
+                del.onclick = () => removeApp(app.appId, del);
+                op.appendChild(del);
+            }
+            tr.appendChild(op);
+
             tbody.appendChild(tr);
         });
-        tbody.querySelectorAll('[data-save]').forEach(btn =>
-            btn.onclick = () => saveEdit(btn.dataset.save, btn));
-        tbody.querySelectorAll('[data-del]').forEach(btn =>
-            btn.onclick = () => removeApp(btn.dataset.del, btn));
+    }
+
+    /** 复制 apiKey 到剪贴板：按钮文案短暂变成「已复制」，失败则退回提示手动选 */
+    function copyKey(text, btn) {
+        if (!navigator.clipboard) {
+            setTip('appTip', '当前环境不支持剪贴板（需 HTTPS 或 localhost），请手动选中复制', true);
+            return;
+        }
+        navigator.clipboard.writeText(text).then(() => {
+            btn.textContent = '已复制';
+            setTimeout(() => btn.textContent = '复制', 1500);
+        }).catch(() => setTip('appTip', '复制失败，请手动选中复制', true));
+    }
+
+    function editInput(id, value, placeholder) {
+        const box = document.createElement('div');
+        box.className = 'field-row';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = id;
+        input.value = value || '';
+        input.placeholder = placeholder || '';
+        box.appendChild(input);
+        return box;
+    }
+
+    function startEdit(appId) {
+        editingAppId = appId;
+        setTip('appTip', '');
+        renderApps();
+    }
+
+    function cancelEdit() {
+        editingAppId = '';
+        setTip('appTip', '');
+        renderApps();
     }
 
     /* ================= 操作 ================= */
@@ -358,69 +601,95 @@
         }
     }
 
+    /**
+     * 保存某一行的编辑结果：apiKey 留空 = 不修改；白名单留空 = 清空限制（服务端归一化为 *）
+     */
     async function saveEdit(appId, btn) {
-        const tr = btn.closest('tr');
+        const modules = $('editModules').value.trim();
         const body = {
-            apiKey: tr.querySelector('.app-key').value.trim(),
-            allowedModules: tr.querySelector('.app-modules').value.split(',').map(s => s.trim()).filter(Boolean)
+            apiKey: $('editApiKey').value.trim(),
+            allowedModules: modules ? modules.split(',').map(s => s.trim()).filter(Boolean) : []
         };
         btn.disabled = true;
+        btn.textContent = '保存中';
         try {
             const resp = await fetch('/ws/admin/apps/' + encodeURIComponent(appId), {
                 method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
             });
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            setTip('appTip', '已保存 ' + appId);
+            // 带上后端返回的 detail：例如 409「内置默认应用只读」要让人看懂为什么被拒
+            if (!resp.ok) throw new Error((await resp.text()) || ('HTTP ' + resp.status));
+            const data = await resp.json();
+            editingAppId = '';
             await loadApps();
+            // loadApps 会清一次提示，成功文案放在刷新之后
+            setTip('appTip', '已修改：' + appId + '（白名单 ' + (data.allowedModules || []).join(', ') + '）');
         } catch (e) {
-            setTip('appTip', '保存失败：' + e.message, true);
-        } finally {
             btn.disabled = false;
+            btn.textContent = '保存';
+            setTip('appTip', '修改失败：' + e.message, true);
         }
     }
 
     async function removeApp(appId, btn) {
-        if (!confirm('确认删除应用 ' + appId + '？删除后该应用立即无法推送')) return;
+        if (!confirm('确认删除应用？\n\n' + appId +
+            '\n\n删除后用它推送会立即返回 401，且台账文件同步删除，重启不会恢复。')) return;
         btn.disabled = true;
+        btn.textContent = '删除中';
         try {
-            await fetch('/ws/admin/apps/' + encodeURIComponent(appId), {method: 'DELETE'});
-            await loadApps();
-        } finally {
+            const resp = await fetch('/ws/admin/apps/' + encodeURIComponent(appId), {method: 'DELETE'});
+            if (!resp.ok) throw new Error((await resp.text()) || ('HTTP ' + resp.status));
+            if (editingAppId === appId) editingAppId = '';
+            setTip('appTip', '已删除：' + appId);
+        } catch (e) {
             btn.disabled = false;
+            btn.textContent = '删除';
+            setTip('appTip', '删除失败：' + e.message, true);
+            return;
         }
+        await loadApps();
     }
 
     async function addApp() {
         const appId = $('newAppId').value.trim();
-        let apiKey = $('newApiKey').value.trim();
         if (!appId) {
-            setTip('appTip', '应用ID 必填', true);
+            setTip('appTip', 'appId 不能为空', true);
             return;
         }
-        if (!apiKey) {
-            const resp = await fetch('/ws/admin/apps/generate-key');
-            apiKey = (await resp.json()).apiKey;
-        }
-        const modules = $('newModules').value.split(',').map(s => s.trim()).filter(Boolean);
+        // apiKey 留空交给服务端生成：不在浏览器里造密钥，也省得自己想一个弱口令
+        const modules = $('newModules').value.trim();
+        const body = {
+            appId: appId,
+            apiKey: $('newApiKey').value.trim(),
+            allowedModules: modules ? modules.split(',').map(s => s.trim()).filter(Boolean) : []
+        };
         try {
             const resp = await fetch('/ws/admin/apps', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({appId: appId, apiKey: apiKey, allowedModules: modules})
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
             });
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            if (!resp.ok) throw new Error((await resp.text()) || ('HTTP ' + resp.status));
+            const data = await resp.json();
             $('newAppId').value = '';
             $('newApiKey').value = '';
             $('newModules').value = '';
-            setTip('appTip', '已新增 ' + appId);
-            await loadApps();
+            // 回显服务端最终落地的 key（留空时这里是自动生成的那个）
+            setTip('appTip', '已新增：' + appId + '（key ' + (data.apiKey || '') + '）');
         } catch (e) {
             setTip('appTip', '新增失败：' + e.message, true);
+            return;
         }
+        await loadApps();
     }
 
     async function genKey() {
-        const resp = await fetch('/ws/admin/apps/generate-key');
-        $('newApiKey').value = (await resp.json()).apiKey;
+        try {
+            const resp = await fetch('/ws/admin/apps/generate-key');
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const data = await resp.json();
+            $('newApiKey').value = data.apiKey;
+            setTip('appTip', '');
+        } catch (e) {
+            setTip('appTip', '生成密钥失败：' + e.message, true);
+        }
     }
 
     /* ================= 页签 ================= */

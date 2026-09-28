@@ -44,7 +44,7 @@ mvnw.cmd -pl nexus-websocket -am package -DskipTests   # Windows
 验证：
 
 1. 打开 `http://localhost:8089/console` 推送测试页，默认订阅模块 `test`，点击「连接」。
-2. 选择默认应用 `test` / `test_secret`，点「推送」→ 页面收到 `test:bid` 消息。
+2. 选择默认应用 `test-demo` / `c3RyZWFtLW5leHVz`，点「推送」→ 页面收到 `test:bid` 消息。
 3. 打开 `http://localhost:8089/admin` 查看在线连接台账、模块分布、强制下线、应用管理。
 
 ---
@@ -56,8 +56,8 @@ mvnw.cmd -pl nexus-websocket -am package -DskipTests   # Windows
 ```bash
 curl -X POST http://localhost:8089/ws/push \
   -H 'Content-Type: application/json' \
-  -H 'X-Ws-AppId: test' \
-  -H 'X-Ws-Key: test_secret' \
+  -H 'X-Ws-AppId: test-demo' \
+  -H 'X-Ws-Key: c3RyZWFtLW5leHVz' \
   -d '{"bizModule":"test","action":"bid","data":{"itemId":"L123"}}'
 ```
 
@@ -74,8 +74,8 @@ curl -X POST http://localhost:8089/ws/push \
 ```java
 NexusRestClient client = NexusRestClient.builder()
         .wsBaseUrl("http://localhost:8089")
-        .wsAppId("test")
-        .wsApiKey("test_secret")
+        .wsAppId("test-demo")
+        .wsApiKey("c3RyZWFtLW5leHVz")
         .build();
 
 PushResult result = client.wsPush(PushRequest.builder()
@@ -193,9 +193,12 @@ ws.onclose = () => {
 | PUT | `/ws/admin/apps/{appId}` | 修改应用白名单 |
 | DELETE | `/ws/admin/apps/{appId}` | 删除应用 |
 
-> WebSocket 推送应用**仅存在内存中**，重启后回到默认应用 `test` / `test_secret`；生产环境请按需预先配置或自行实现持久化。
+> WebSocket 推送应用**落盘持久化**：内置默认应用 `test-demo / c3RyZWFtLW5leHVz`（白名单 `test`，**只读**：不可改、不可删），
+> 其余应用在管理页「推送应用」页签运行时增删，改动同步写入 `nexus.ws.app-store-path`（默认 `nexus-websocket/data/push-apps.json`），**重启后仍在**。
+> 多实例部署请各自指向独立的本地文件，或改用共享存储实现 `PushAppStore`。
 >
-> 当前 `/ws/admin/**` 与 `/admin`、`/console` 页面**无 session 登录限制**，部署生产环境时务必限制内网访问或前置统一鉴权。
+> `/ws/admin/**` 运维接口与 `/admin`、`/console` 页面**需 session 登录**（默认 `admin / adminws`，由 `nexus.ws.admin.*` 配置）；
+> 未登录时页面 302 到 `/login`、接口返回 401 JSON。部署务必改掉默认口令，并限制内网访问。
 
 ---
 
@@ -211,6 +214,7 @@ ws.onclose = () => {
 | `nexus.ws.heartbeat-interval` / `nexus.ws.heartbeat-timeout` | `15s` / `90s` | WS 心跳间隔与失联阈值 |
 | `nexus.ws.max-connections` | `30000` | 最大 WS 连接数，0 = 不限 |
 | `nexus.ws.max-frame-length` | `65536` | 单个 WebSocket 帧最大长度（字节） |
+| `nexus.ws.ip2region-path` | `classpath:ip2region.xdb` | 台账 IP 归属地的离线库（xdb）；数据文件需自备，缺失时城市列显示 `-`，私有地址直接判为「局域网」 |
 | `nexus.ws.boss-threads` / `nexus.ws.worker-threads` | `1` / `0` | Netty 线程数；0 = 取 Netty 默认值 |
 | `nexus.ws.auth-enabled` | `true` | 推送鉴权（`X-Ws-AppId` + `X-Ws-Key`），**只作用于 REST 推送** |
 | `nexus.ws.connect-auth-enabled` / `nexus.ws.connect-auth-token` | `false` / `U3RyZWFtTmV4dXM=` | 建连鉴权（查询参数 `token`），WebSocket 握手无法自定义请求头 |

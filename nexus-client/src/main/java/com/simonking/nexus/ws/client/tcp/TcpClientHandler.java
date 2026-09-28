@@ -50,8 +50,7 @@ class TcpClientHandler extends SimpleChannelInboundHandler<String> {
         try {
             // 必须带出泛型实参：event 是泛型字段，按原始类型反序列化只会得到字符串，
             // 后面与 TcpEvent 常量比较会永远不成立（且编译器看不出来）
-            message = objectMapper.readValue(text, new TypeReference<NexusMessage<Object, TcpEvent>>() {
-            });
+            message = objectMapper.readValue(text, new TypeReference<NexusMessage<Object, TcpEvent>>() {});
         } catch (Exception e) {
             // 解析不了的报文不关连接：多半是协议版本不一致，关了只会让重连线程反复空转
             log.warn("[nexus-tcp] 报文解析失败, text={}", text, e);

@@ -3,8 +3,6 @@ package com.simonking.nexus.ws.client;
 import com.simonking.nexus.ws.client.tcp.NexusTcpClient;
 import com.simonking.stream.nexus.common.model.PushRequest;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicInteger;

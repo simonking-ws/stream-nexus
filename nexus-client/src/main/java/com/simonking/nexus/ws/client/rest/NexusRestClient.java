@@ -89,9 +89,9 @@ public class NexusRestClient implements AutoCloseable {
     /**
      * nexus-websocket 内置默认应用（见其 {@code PushAppRegistry}）：与 SSE 侧是两套独立注册表
      */
-    private static final String DEFAULT_WS_APP_ID = "test";
+    private static final String DEFAULT_WS_APP_ID = "test-demo";
 
-    private static final String DEFAULT_WS_API_KEY = "test_secret";
+    private static final String DEFAULT_WS_API_KEY = "c3RyZWFtLW5leHVz";
 
     /** 错误响应体在异常消息里最多保留这么长：网关的错误页动辄几十 KB，不该整页灌进日志 */
     private static final int MAX_ERROR_BODY_LENGTH = 512;

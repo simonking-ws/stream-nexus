@@ -23,8 +23,8 @@ import java.util.List;
  * <p>业务系统不写任何 Netty / WebSocket 代码，一次 HTTP POST 即可：
  * <pre>
  * POST /ws/push
- * X-Ws-AppId: test
- * X-Ws-Key:   test_secret
+ * X-Ws-AppId: test-demo
+ * X-Ws-Key:   c3RyZWFtLW5leHVz
  * {"bizModule":"order","action":"CREATE","data":{...}}
  * </pre>
  * 响应直接带回 {@code total / success / failed}，调用方无需等待任何异步确认。
