@@ -1,6 +1,6 @@
-package com.simonking.stream.nexus.sse.location;
+package com.simonking.stream.nexus.common.location;
 
-import com.simonking.stream.nexus.sse.config.SseProperties;
+import com.simonking.stream.nexus.common.util.IpUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.lionsoul.ip2region.xdb.LongByteArray;
 import org.lionsoul.ip2region.xdb.Searcher;
@@ -8,7 +8,6 @@ import org.lionsoul.ip2region.xdb.Version;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
-import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
 import java.util.LinkedHashSet;
@@ -19,7 +18,11 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * IP 归属地（城市）查询：给连接台账补一列「从哪来」
  *
- * <p>用 ip2region 离线库（xdb）而非在线 API：本服务是内网推送通道，运维页不能反过来依赖公网，
+ * <p>SSE 与 WebSocket 两个服务的台账共用这一份：解析规则、空值口径、缓存策略必须一致，
+ * 否则同一个客户端在两张台账里会显示成两个城市，排查时直接误导。
+ * 本实现以 SSE 侧的为准上提到这里，两个模块不再各写一份。
+ *
+ * <p>用 ip2region 离线库（xdb）而非在线 API：这两个服务都是内网推送通道，运维页不能反过来依赖公网，
  * 在线接口一断就整列空白，还有频率限制。离线库一次性加载进内存，查询是纯内存二分，微秒级。
  *
  * <p><b>数据文件缺失不是致命错误</b>：{@code ip2region.xdb} 需要自备（仓库不收 11MB 二进制），
@@ -29,10 +32,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>结果走内存缓存：同一个出口 IP 往往挂着几十上百条连接，没必要反复查。
  * 缓存无上限但有天然上界——IP 种类远少于连接数。
  *
+ * <p>刻意<b>不加 {@code @Component}</b>：本包不在两个服务的组件扫描路径下，
+ * 加了也扫不到；库位置是两个服务各自的配置项（{@code nexus.sse.ip2region-path} /
+ * {@code nexus.ws.ip2region-path}），由各自的 {@code IpLocationConfig} 用 @Bean 注入，
+ * 这样公共库不反过来认识任何一方的配置前缀。
+ *
  * @author simonking
  */
 @Slf4j
-@Component
 public class IpLocationService implements DisposableBean {
 
     /**
@@ -52,9 +59,13 @@ public class IpLocationService implements DisposableBean {
 
     private final Map<String, String> cache = new ConcurrentHashMap<>();
 
-    public IpLocationService(SseProperties properties, ResourceLoader loader) {
+    /**
+     * @param ip2regionPath 数据文件位置（{@code classpath:} / {@code file:} 前缀，由各服务自己的配置项给出）
+     * @param loader       资源加载器（Spring 容器自带，直接注入即可）
+     */
+    public IpLocationService(String ip2regionPath, ResourceLoader loader) {
         Searcher loaded = null;
-        String path = properties.getIp2regionPath();
+        String path = ip2regionPath;
         try {
             Resource res = loader.getResource(path);
             if (res.exists()) {
@@ -67,14 +78,14 @@ public class IpLocationService implements DisposableBean {
                 Version version = Version.fromHeader(Searcher.loadHeaderFromBuffer(content));
                 // 整库进内存：查询全程无 IO，是三种缓存策略里最适合服务端常驻的
                 loaded = Searcher.newWithBuffer(version, content);
-                log.info("[sse] IP 库已加载：{}（IP 版本 {}），台账城市列启用", path, version.name);
+                log.info("[ip-location] IP 库已加载：{}（IP 版本 {}），台账城市列启用", path, version.name);
             } else {
-                log.warn("[sse] 未找到 IP 库 {}，台账城市列将显示 -："
-                        + "下载 ip2region.xdb 放 resources，或用 nexus.sse.ip2region-path 指定路径", path);
+                log.warn("[ip-location] 未找到 IP 库 {}，台账城市列将显示 -："
+                        + "下载 ip2region.xdb 放 resources，或用各服务的 ip2region-path 配置项指定路径", path);
             }
         } catch (Exception e) {
             // 加载失败按「没这个库」处理：城市列是可有可无的展示项，不该拖垮启动
-            log.warn("[sse] IP 库加载失败 {}，台账城市列将显示 -：{}", path, e.getMessage());
+            log.warn("[ip-location] IP 库加载失败 {}，台账城市列将显示 -：{}", path, e.getMessage());
         }
         this.searcher = loaded;
     }
@@ -82,7 +93,7 @@ public class IpLocationService implements DisposableBean {
     /**
      * 查询 IP 归属地
      *
-     * @param ip 归一化后的 IP（见 {@code IpUtils#normalize}），可为 null / {@code -}
+     * @param ip 归一化后的 IP（见 {@link IpUtils#normalize}），可为 null / {@code -}
      * @return 城市描述（如「广东省深圳市」）、私有地址返回「局域网」、查不到返回 {@code -}
      */
     public String city(String ip) {

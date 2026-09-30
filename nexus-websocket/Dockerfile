@@ -35,12 +35,15 @@ ENV TZ=Asia/Shanghai \
     SERVER_PORT=8089 \
     NEXUS_WS_WS_PORT=9090 \
     NEXUS_WS_TCP_PORT=9091 \
+    # 推送应用台账：容器里必须给绝对路径。相对路径会挂到「jar 所在目录的上两级」，
+    # 而 jar 在 /app/app.jar，推出来是根目录 /，非 root 用户写不进去（首次启动落盘会失败）
+    NEXUS_WS_APP_STORE_PATH=/app/data/push-apps.json \
     # 容器感知 JDK17 默认开启，这里只给个稳妥的堆上限；JAVA_OPTS 可在运行时整体覆盖
     JAVA_OPTS="-XX:MaxRAMPercentage=75 -Djava.security.egd=file:/dev/./urandom"
 
 RUN groupadd --system --gid 1000 nexus \
     && useradd --system --uid 1000 --gid nexus --no-create-home nexus \
-    && mkdir -p /app && chown nexus:nexus /app
+    && mkdir -p /app /app/data && chown -R nexus:nexus /app
 
 WORKDIR /app
 
@@ -53,7 +56,7 @@ USER nexus
 EXPOSE 8089 9090 9091
 
 # 无 curl / wget 的基础镜像，用 bash 的 /dev/tcp 直接探活：
-# 探 /ws/admin/apps（无需鉴权），能连上且返回 HTTP 响应行即视为健康
+# 探 /ws/admin/apps，能连上且返回 HTTP 响应行即视为健康（该接口需登录，未登录回 401 也是有效响应）
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
     CMD bash -c 'exec 3<>/dev/tcp/127.0.0.1/${SERVER_PORT:-8089} \
         && printf "GET /ws/admin/apps HTTP/1.0\r\n\r\n" >&3 \

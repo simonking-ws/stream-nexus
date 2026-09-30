@@ -187,7 +187,13 @@ SSE 通道（`nexus-sse`，端口 8088）开箱自带两个页面，冒烟验证
   <img src="images/sse/03.png" alt="SSE 示例 3" width="32%"/>
 </p>
 
-WebSocket 通道（`nexus-websocket`，端口 8089）示例正在优化中...
+WebSocket 通道（`nexus-websocket`，端口 8089）开箱自带两个页面，冒烟验证时看到的就是下面这些界面：
+
+<p>
+  <img src="images/ws/01.png" alt="WS 示例 1" width="32%"/>
+  <img src="images/ws/02.png" alt="WS 示例 2" width="32%"/>
+  <img src="images/ws/03.png" alt="WS 示例 3" width="32%"/>
+</p>
 
 ### 一键冒烟验证
 
@@ -248,7 +254,7 @@ client.close();
 - **失败即抛 `PushException`**：401 凭证不对 / 403 模块越权 / 400 报文缺字段 / 连不上与超时，
   消息里带通道 + 状态码 + 响应体（截断到 512 字符）。要不要重试只有业务知道，SDK 不做回调、不返回 null。
 - **鉴权必填**：分别走 `X-Sse-AppId` + `X-Sse-Key` 与 `X-Ws-AppId` + `X-Ws-Key`；builder 默认值是两个服务
-  内置的 `test / test_secret`（开箱即用），**生产务必换成管理页「推送应用」页签下发的应用**。
+  内置的 `test-demo / c3RyZWFtLW5leHVz`（开箱即用），**生产务必换成管理页「推送应用」页签下发的应用**。
 - **寻址**：`bizModule` 按模块广播（首选，终端重连后依然可达），`clientIds` 定向（clientId 重连即换，
   需终端重新上报），两者可同时填，命中并集。
 - **高频场景换 TCP**：`NexusTcpClient` 一条长连接复用、发后不管，仅 WebSocket 服务提供（端口 9091）。

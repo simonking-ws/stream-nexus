@@ -30,6 +30,16 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
+
+        <!-- IP 归属地（城市）：台账城市列，SSE 与 WebSocket 共用一套实现（location.IpLocationService）。
+             标 optional：客户端 SDK 只复用「常量 + 模型 + 工具」，不该被拖进这条依赖；
+             真正用到它的服务端模块（nexus-sse / nexus-websocket）在自己 pom 里显式声明 -->
+        <dependency>
+            <groupId>org.lionsoul</groupId>
+            <artifactId>ip2region</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

@@ -48,6 +48,26 @@ public final class NexusConstants {
     public static final String MODULE_WILDCARD = "*";
 
     /**
+     * 内置默认推送应用的 appId：{@code test-demo}
+     *
+     * <p>两个服务的推送应用台账各存各的文件，但内置默认应用必须是同一份——本地联调开箱即用，
+     * 也是推送测试页下拉的保底选项。取值一旦分歧，同一个接入方在两个服务上就得配两套凭据，
+     * 联调与文档的基准也会跟着裂开，故收在这里。
+     *
+     * <p>它是<b>只读凭证</b>：始终在台账里，appId / apiKey / 白名单都不可改、也不可删除
+     * （改了等于把基准改掉，所有接入方都要跟着换）。要别的凭证请新建应用。
+     */
+    public static final String DEFAULT_APP_ID = "test-demo";
+
+    /**
+     * 内置默认推送应用的 apiKey：{@code stream-nexus} 的 Base64 文本
+     *
+     * <p>与 {@link #DEFAULT_APP_ID} 配对使用，仅供本地联调——部署务必新建应用换掉它：
+     * 拿到它等于拿到白名单（{@code test}）内的推送权限。
+     */
+    public static final String DEFAULT_API_KEY = "c3RyZWFtLW5leHVz";
+
+    /**
      * 建连鉴权查询参数名（{@code token}）
      *
      * <p>为无法带自定义请求头的客户端准备的传参通道（浏览器 {@code EventSource} 与

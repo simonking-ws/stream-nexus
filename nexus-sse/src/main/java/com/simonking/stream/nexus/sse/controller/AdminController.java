@@ -1,11 +1,12 @@
 package com.simonking.stream.nexus.sse.controller;
 
+import com.simonking.stream.nexus.common.constant.NexusConstants;
+import com.simonking.stream.nexus.common.location.IpLocationService;
 import com.simonking.stream.nexus.sse.auth.PushApp;
 import com.simonking.stream.nexus.sse.auth.PushAppRegistry;
 import com.simonking.stream.nexus.sse.config.SseProperties;
 import com.simonking.stream.nexus.sse.connection.SseClient;
 import com.simonking.stream.nexus.sse.connection.SseClientRegistry;
-import com.simonking.stream.nexus.sse.location.IpLocationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.util.StringUtils;
@@ -64,7 +65,7 @@ public class AdminController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("total", items.size());
         result.put("authEnabled", appRegistry.isAuthEnabled());
-        result.put("defaultAppId", PushAppRegistry.DEFAULT_APP_ID);
+        result.put("defaultAppId", NexusConstants.DEFAULT_APP_ID);
         // 台账落盘位置：页面直接展示，让人知道改动写在哪、重启还在不在
         result.put("storePath", appRegistry.storePath());
         result.put("items", items);
@@ -118,12 +119,12 @@ public class AdminController {
         // 且所有接入方都要跟着换——要别的凭证就新建应用
         if (PushAppRegistry.isBuiltIn(appId)) {
             boolean keyUnchanged = !StringUtils.hasText(body.apiKey())
-                    || PushAppRegistry.DEFAULT_API_KEY.equals(body.apiKey().trim());
+                    || NexusConstants.DEFAULT_API_KEY.equals(body.apiKey().trim());
             boolean modulesUnchanged = body.allowedModules() == null
                     || PushAppRegistry.normalize(body.allowedModules()).equals(PushAppRegistry.DEFAULT_ALLOWED_MODULES);
             if (!keyUnchanged || !modulesUnchanged) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "内置默认应用只读，appId / apiKey / 白名单 均不可修改：" + PushAppRegistry.DEFAULT_APP_ID);
+                        "内置默认应用只读，appId / apiKey / 白名单 均不可修改：" + NexusConstants.DEFAULT_APP_ID);
             }
             Map<String, Object> unchanged = new LinkedHashMap<>();
             unchanged.put("ok", true);
@@ -159,7 +160,7 @@ public class AdminController {
     public Map<String, Object> removeApp(@PathVariable String appId) {
         if (PushAppRegistry.isBuiltIn(appId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "内置默认应用不可删除（只读凭证）：" + PushAppRegistry.DEFAULT_APP_ID);
+                    "内置默认应用不可删除（只读凭证）：" + NexusConstants.DEFAULT_APP_ID);
         }
         boolean removed = appRegistry.remove(appId);
         return Map.of("ok", true, "appId", appId, "removed", removed);

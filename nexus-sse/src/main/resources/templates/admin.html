@@ -32,7 +32,12 @@
 <body>
 
 <div class="topbar">
-    <div class="brand"><span class="logo">SSE</span> <span class="brand-text">Stream Nexus</span></div>
+    <div class="brand">
+        <span class="logo"><img class="logo-img" th:src="@{/images/logo.png}" alt="N" /></span>
+        <span class="brand-text">Stream Nexus</span>
+        <!-- 服务标识：图标统一后靠它区分两个服务，避免开着两个页面认不出自己在哪 -->
+        <span class="svc-tag">SSE</span>
+    </div>
     <div class="nav">
         <a th:href="@{/admin}" th:classappend="${active == 'admin'} ? 'active' : ''">连接管理</a>
         <!-- 推送测试新开标签页：管理页和它经常要对着看（一边看连接台账一边推消息） -->

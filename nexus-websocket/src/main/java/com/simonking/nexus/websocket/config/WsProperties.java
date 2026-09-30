@@ -82,8 +82,27 @@ public class WsProperties {
 
     /**
      * 推送鉴权开关（appId + apiKey）
+     *
+     * <p>注意：推送应用（appId / apiKey）不在此配置，而是运行时维护在
+     * {@code PushAppRegistry}：内置默认应用 {@code test-demo / c3RyZWFtLW5leHVz}（白名单 {@code test}，只读），
+     * 其余应用在 {@code /admin} 管理页「推送应用」页签增删，
+     * 并落盘到 {@link #appStorePath} 对应的 JSON 文件（重启后仍在）
      */
     private boolean authEnabled = true;
+
+    /**
+     * 推送应用台账的持久化文件（JSON）
+     *
+     * <p>管理页新增 / 改 key / 删除都会同步写回这个文件，进程重启时由
+     * {@code PushAppStore} 读回内存，避免「重启回到默认应用」。
+     *
+     * <p>相对路径以**模块根目录**（{@code nexus-websocket}）为基准，而不是进程工作目录：
+     * 从仓库根启动、从模块目录启动、或 IDEA 里换个运行目录，台账都落在同一个
+     * {@code nexus-websocket/data} 下，不会分裂成两份（配绝对路径则原样采用）。
+     * 多实例部署请各自指向独立的本地文件（或改用共享存储实现 {@code PushAppStore}）——
+     * 本实现是单实例的本地文件，多实例各自为政会互相覆盖认知。
+     */
+    private String appStorePath = "data/push-apps.json";
 
     /**
      * 建连鉴权开关（共享令牌）
@@ -99,4 +118,15 @@ public class WsProperties {
      * 控制台页面拼接 WebSocket 地址时使用的对外地址（host 或 host:port）
      */
     private String publicEndpoint = "";
+
+    /**
+     * IP 归属地（城市）离线库位置：ip2region 的 xdb 数据文件
+     *
+     * <p>支持 {@code classpath:} 与 {@code file:} 前缀；相对路径的 file: 以进程工作目录为基准，
+     * 部署时建议写成绝对路径，避免换个启动目录就找不到库。
+     *
+     * <p>文件缺失不是致命错误：台账城市列降级显示 {@code -}，其余功能照常。
+     * 内网部署（客户端全是私有地址）本就不需要它——私有地址直接判定为「局域网」，不查库。
+     */
+    private String ip2regionPath = "classpath:ip2region.xdb";
 }

@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
  * 推送应用注册表：鉴权的唯一数据源
  *
  * <p>应用不在配置文件里维护：内置一个开箱即用的默认应用
- * {@value #DEFAULT_APP_ID} / {@value #DEFAULT_API_KEY}（白名单 {@code test}），
+ * {@value NexusConstants#DEFAULT_APP_ID} / {@value NexusConstants#DEFAULT_API_KEY}（白名单 {@code test}），
  * 它是**只读凭证**：始终在列表里，appId / apiKey / 白名单 都不可改、也不可删除
  * （改了等于把联调与文档的基准改掉，而且所有接入方都要跟着换）。
  * 其余应用在 {@code /admin} 管理页运行时增删。
@@ -40,24 +40,12 @@ public class PushAppRegistry {
     private static final Logger log = LoggerFactory.getLogger(PushAppRegistry.class);
 
     /**
-     * 内置默认应用（只读）：本地联调开箱即用，推送测试页下拉的保底选项
-     */
-    public static final String DEFAULT_APP_ID = "test-demo";
-
-    public static final String DEFAULT_API_KEY = "c3RyZWFtLW5leHVz";
-
-    /**
      * 内置默认应用的模块白名单：只放 {@code test}，避免它成为「能推任意模块的万能钥匙」
+     *
+     * <p>appId / apiKey 是与 WebSocket 服务共用的内置常量，收在 {@link NexusConstants}，
+     * 不在这里重复定义。
      */
     public static final List<String> DEFAULT_ALLOWED_MODULES = List.of("test");
-
-    /**
-     * 旧版内置应用：升级后由 {@link #DEFAULT_APP_ID} 取代，启动时若还是旧值就摘掉，
-     * 否则台账里会躺着一个「不知道哪来的、还能推」的凭证
-     */
-    private static final String LEGACY_DEFAULT_APP_ID = "test";
-
-    private static final String LEGACY_DEFAULT_API_KEY = "test_secret";
 
     private final boolean authEnabled;
 
@@ -79,32 +67,23 @@ public class PushAppRegistry {
         }
         boolean dirty = false;
 
-        // 迁移：旧版内置应用（test / test_secret）在新内置应用就位后已无存在意义
-        PushApp legacy = apps.get(LEGACY_DEFAULT_APP_ID);
-        if (legacy != null && LEGACY_DEFAULT_API_KEY.equals(legacy.apiKey())) {
-            apps.remove(LEGACY_DEFAULT_APP_ID);
-            dirty = true;
-            log.warn("检测到旧版内置应用 {}/{}，已移除（新版内置应用为 {}/{}）",
-                    LEGACY_DEFAULT_APP_ID, LEGACY_DEFAULT_API_KEY, DEFAULT_APP_ID, DEFAULT_API_KEY);
-        }
-
         // 内置默认应用始终在、且三个字段恒定：首次启动 / 老台账里没有 / 被删过 / 被手改过，
         // 都纠正回内置值并落盘。它是本地联调与推送测试页下拉的保底项
-        PushApp builtIn = apps.get(DEFAULT_APP_ID);
+        PushApp builtIn = apps.get(NexusConstants.DEFAULT_APP_ID);
         if (builtIn == null) {
-            apps.put(DEFAULT_APP_ID, defaultApp());
+            apps.put(NexusConstants.DEFAULT_APP_ID, defaultApp());
             dirty = true;
-        } else if (!DEFAULT_API_KEY.equals(builtIn.apiKey())
+        } else if (!NexusConstants.DEFAULT_API_KEY.equals(builtIn.apiKey())
                 || !DEFAULT_ALLOWED_MODULES.equals(builtIn.allowedModules())) {
             // 台账被人手改过：内置凭证只读，一律纠正（页面与接口本来也不许改）
-            apps.put(DEFAULT_APP_ID, defaultApp());
+            apps.put(NexusConstants.DEFAULT_APP_ID, defaultApp());
             dirty = true;
         }
         if (dirty || !hasStore) {
             persist();
         }
         log.info("推送应用载入完成：共 {} 个{}台账 {}，鉴权开关 authEnabled={}", apps.size(),
-                dirty ? "（内置默认应用 " + DEFAULT_APP_ID + " 已校正），" : "，", store.path(), authEnabled);
+                dirty ? "（内置默认应用 " + NexusConstants.DEFAULT_APP_ID + " 已校正），" : "，", store.path(), authEnabled);
     }
 
     public boolean isAuthEnabled() {
@@ -153,14 +132,14 @@ public class PushAppRegistry {
      * 内置默认应用：始终存在于台账，三个字段都不可改、整条不可删除（接口与页面都会拦，这里再兜一层）
      */
     public static boolean isBuiltIn(String appId) {
-        return DEFAULT_APP_ID.equals(appId == null ? null : appId.trim());
+        return NexusConstants.DEFAULT_APP_ID.equals(appId == null ? null : appId.trim());
     }
 
     /**
      * 内置默认应用的固定形态（启动时校正、页面展示都以此为准）
      */
     public static PushApp defaultApp() {
-        return new PushApp(DEFAULT_APP_ID, DEFAULT_API_KEY, DEFAULT_ALLOWED_MODULES);
+        return new PushApp(NexusConstants.DEFAULT_APP_ID, NexusConstants.DEFAULT_API_KEY, DEFAULT_ALLOWED_MODULES);
     }
 
     public boolean remove(String appId) {

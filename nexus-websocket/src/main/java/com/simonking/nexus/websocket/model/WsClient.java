@@ -18,8 +18,11 @@ import java.util.concurrent.atomic.AtomicLong;
 public class WsClient {
 
     /**
-     * 客户端ID：终端建连时自带（推荐自己生成 UUID 并持久化），不带则由服务端生成后随回执下发。
-     * 它是注册表主键，也是业务系统做定向推送的寻址依据
+     * 客户端ID：由<b>服务端</b>在握手阶段生成（UUID，见 {@code NexusUtils#newClientId()}），
+     * 随建连回执下发给终端；终端既不传递也无法伪造。
+     *
+     * <p>它是注册表主键，也是业务系统做定向推送的寻址依据。<b>重连即换</b>：
+     * 要按用户维度稳定寻址请用模块订阅，或在业务系统侧维护「用户 → 当前 clientId」的映射。
      */
     private final String clientId;
 

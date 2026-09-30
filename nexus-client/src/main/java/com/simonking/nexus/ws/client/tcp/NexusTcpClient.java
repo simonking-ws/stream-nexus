@@ -221,7 +221,39 @@ public class NexusTcpClient implements AutoCloseable {
             groupRef.set(group);
         }
 
-        ChannelFuture future = newBootstrap(group).connect(host, port);
+        Bootstrap bootstrap = new Bootstrap();
+        bootstrap.group(group)
+                .channel(NioSocketChannel.class)
+                .option(ChannelOption.SO_KEEPALIVE, true)
+                .option(ChannelOption.TCP_NODELAY, true)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) Math.max(connectTimeoutMs, 1L))
+                .handler(new ChannelInitializer<SocketChannel>() {
+                    @Override
+                    protected void initChannel(SocketChannel channel) {
+                        ChannelPipeline pipeline = channel.pipeline();
+                        // 入站：按 4 字节长度头切帧，去掉粘包/拆包（常量取自 TcpConstants）
+                        pipeline.addLast(new LengthFieldBasedFrameDecoder(
+                                maxFrameLength,
+                                TcpConstants.LENGTH_FIELD_OFFSET,
+                                TcpConstants.LENGTH_FIELD_LENGTH,
+                                TcpConstants.LENGTH_ADJUSTMENT,
+                                TcpConstants.INITIAL_BYTES_TO_STRIP));
+                        // 出站：补同样的长度头。必须排在 StringEncoder 之前（更靠 head）——
+                        // 出站事件从 tail 往 head 走，先编码成字节再补头，反了对端会把 JSON 前 4 字节当长度
+                        pipeline.addLast(new LengthFieldPrepender(TcpConstants.LENGTH_FIELD_LENGTH));
+                        pipeline.addLast(new StringDecoder(StandardCharsets.UTF_8));
+                        pipeline.addLast(new StringEncoder(StandardCharsets.UTF_8));
+                        // 心跳：读空闲判死重连，写空闲主动发 PING（0 表示不启用）
+                        pipeline.addLast(new IdleStateHandler(
+                                Math.max(heartbeatTimeoutMs, 0L),
+                                Math.max(heartbeatIntervalMs, 0L),
+                                0,
+                                TimeUnit.MILLISECONDS));
+                        pipeline.addLast(new TcpClientHandler(NexusTcpClient.this, objectMapper));
+                    }
+                });
+
+        ChannelFuture future = bootstrap.connect(host, port);
         try {
             if (!future.await(connectTimeoutMs, TimeUnit.MILLISECONDS)) {
                 throw new PushException("连接超时: " + host + ":" + port + " (" + connectTimeoutMs + "ms)");
@@ -262,45 +294,6 @@ public class NexusTcpClient implements AutoCloseable {
             group.shutdownGracefully(0, 2, TimeUnit.SECONDS);
         }
         log.info("[nexus-tcp] 客户端已关闭");
-    }
-
-    // ==================================================================================
-    // 流水线：与服务端同一套编解码器，顺序也不能改
-    // ==================================================================================
-
-    private Bootstrap newBootstrap(EventLoopGroup group) {
-        Bootstrap bootstrap = new Bootstrap();
-        bootstrap.group(group)
-                .channel(NioSocketChannel.class)
-                .option(ChannelOption.SO_KEEPALIVE, true)
-                .option(ChannelOption.TCP_NODELAY, true)
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) Math.max(connectTimeoutMs, 1L))
-                .handler(new ChannelInitializer<SocketChannel>() {
-                    @Override
-                    protected void initChannel(SocketChannel channel) {
-                        ChannelPipeline pipeline = channel.pipeline();
-                        // 入站：按 4 字节长度头切帧，去掉粘包/拆包（常量取自 TcpConstants）
-                        pipeline.addLast(new LengthFieldBasedFrameDecoder(
-                                maxFrameLength,
-                                TcpConstants.LENGTH_FIELD_OFFSET,
-                                TcpConstants.LENGTH_FIELD_LENGTH,
-                                TcpConstants.LENGTH_ADJUSTMENT,
-                                TcpConstants.INITIAL_BYTES_TO_STRIP));
-                        // 出站：补同样的长度头。必须排在 StringEncoder 之前（更靠 head）——
-                        // 出站事件从 tail 往 head 走，先编码成字节再补头，反了对端会把 JSON 前 4 字节当长度
-                        pipeline.addLast(new LengthFieldPrepender(TcpConstants.LENGTH_FIELD_LENGTH));
-                        pipeline.addLast(new StringDecoder(StandardCharsets.UTF_8));
-                        pipeline.addLast(new StringEncoder(StandardCharsets.UTF_8));
-                        // 心跳：读空闲判死重连，写空闲主动发 PING（0 表示不启用）
-                        pipeline.addLast(new IdleStateHandler(
-                                Math.max(heartbeatTimeoutMs, 0L),
-                                Math.max(heartbeatIntervalMs, 0L),
-                                0,
-                                TimeUnit.MILLISECONDS));
-                        pipeline.addLast(new TcpClientHandler(NexusTcpClient.this, objectMapper));
-                    }
-                });
-        return bootstrap;
     }
 
     // ==================================================================================
