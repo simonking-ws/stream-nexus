@@ -203,12 +203,10 @@ WebSocket 通道（`nexus-websocket`，端口 8089）开箱自带两个页面，
 
 ### 一键冒烟验证
 
-1. 打开 SSE 测试页 `http://localhost:8088/console`，先登录（`admin` / `adminsse`），点击「连接」→ 状态变为「已连接」。
+1. 打开 SSE 测试页 `http://localhost:8088/console`，点击「连接」→ 状态变为「已连接」。
 2. 保持默认订阅模块 `test`，点「推送」→ 命中 `total=1`，页面收到 `test:bid` 消息。
-3. 打开 WebSocket 测试页 `http://localhost:8089/console`，登录（`admin` / `adminws`），同样点击「连接」并「推送」。
+3. 打开 WebSocket 测试页 `http://localhost:8089/console`，同样点击「连接」并「推送」。
 4. 观察日志每 15s 收到一次 `PING`，客户端回 `PONG`。
-
-> **测外部连接**：两个测试页均可点「自定义连接地址」切到手填模式，把地址框改成任意外部流式链接（如 `https://host/sse/subscribe` 或 `wss://host/ws`）后点「连接」，即可验证外部 SSE / WebSocket 服务的连通性与消息到达；外部 SSE 若不带事件名，在「监听事件」里改用 `message` 或新增自定义事件名即可。点「重置」回到系统默认地址。
 
 ---
 
