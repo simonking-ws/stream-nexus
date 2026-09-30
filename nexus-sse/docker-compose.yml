@@ -12,14 +12,18 @@ services:
     build:
       context: ..
       dockerfile: nexus-sse/Dockerfile
-    image: simonking/nexus-sse:1.0.0
+    image: simonking/nexus-sse:latest
     container_name: nexus-sse
     restart: unless-stopped
     ports:
       - "8088:8088"
+    # 推送应用台账挂到宿主机：容器重建后新增的应用还在（不挂则随容器消失）
+    volumes:
+      - ./data:/app/data
     environment:
       TZ: Asia/Shanghai
       JAVA_OPTS: "-XX:MaxRAMPercentage=75"
+      SERVER_PORT: 8088
       # 心跳与准入（与配置默认值一致，列出来方便直接改）
       NEXUS_SSE_HEARTBEAT_INTERVAL: 15s
       NEXUS_SSE_HEARTBEAT_TIMEOUT: 90s
@@ -27,7 +31,14 @@ services:
       # 建连鉴权默认关闭；打开后客户端必须带 X-Sse-Token 头或 token 参数
       NEXUS_SSE_CONNECT_AUTH_ENABLED: "false"
       NEXUS_SSE_CONNECT_AUTH_TOKEN: "57yW56iL5pyd6Iqx5aSV5ou+"
+      # 管理页登录：/admin、/console 与 /sse/admin/** 需登录；部署务必改掉默认口令
+      NEXUS_SSE_ADMIN_AUTH_ENABLED: "true"
+      NEXUS_SSE_ADMIN_USERNAME: "admin"
+      NEXUS_SSE_ADMIN_PASSWORD: "adminsse"
+      # 推送应用台账落盘位置（容器内绝对路径，已挂到宿主机 ./data）
+      NEXUS_SSE_APP_STORE_PATH: "/app/data/push-apps.json"
 
 # 注意：
 # 1. 上面的令牌是明文示例，生产请用 docker secret / 外部 env 文件挂载，别提交真实口令。
 # 2. 反向代理（Nginx）下必须关掉 proxy_buffering，否则 SSE 消息会攒在缓冲区不下发。
+# 3. ./data 是台账落盘目录（推送应用），删掉等于清空新增的应用；备份 / 迁移直接拷这个目录。

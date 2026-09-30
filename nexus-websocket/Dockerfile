@@ -53,8 +53,8 @@ WORKDIR /app
 
 COPY --from=build /app.jar /app/app.jar
 
-# 非 root 运行
-USER nexus
+# 以 root 运行：不切 USER，容器默认即 root
+# （落盘目录 /app/data 挂到宿主机，root 写文件免权限问题；需要非 root 时再加 USER nexus）
 
 # 三组端口：HTTP(8089 页面 + REST 推送入口) / Netty WebSocket(9090) / Netty TCP(9091)
 EXPOSE 8089 9090 9091

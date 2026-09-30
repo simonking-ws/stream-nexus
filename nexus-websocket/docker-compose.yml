@@ -16,7 +16,7 @@ services:
     build:
       context: ..
       dockerfile: nexus-websocket/Dockerfile
-    image: simonking/nexus-websocket:1.0.0
+    image: simonking/nexus-websocket:latest
     container_name: nexus-websocket
     restart: unless-stopped
     ports:

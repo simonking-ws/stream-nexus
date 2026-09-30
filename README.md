@@ -119,24 +119,33 @@ services:
     build:
       context: ..                    # 构建上下文必须是仓库根目录
       dockerfile: nexus-sse/Dockerfile
-    image: simonking/nexus-sse:1.0.0
+    image: simonking/nexus-sse:latest
     container_name: nexus-sse
     restart: unless-stopped
     ports:
       - "8088:8088"
+    volumes:
+      - ./data:/app/data    # 推送应用台账落盘，容器重建后仍在
     environment:
       TZ: Asia/Shanghai
+      SERVER_PORT: 8088
       NEXUS_SSE_HEARTBEAT_INTERVAL: 15s
       NEXUS_SSE_HEARTBEAT_TIMEOUT: 90s
       NEXUS_SSE_MAX_CONNECTIONS: 30000
       NEXUS_SSE_CONNECT_AUTH_ENABLED: "false"
+      NEXUS_SSE_ADMIN_AUTH_ENABLED: "true"
+      NEXUS_SSE_ADMIN_USERNAME: "admin"
+      NEXUS_SSE_ADMIN_PASSWORD: "adminsse"
+      NEXUS_SSE_APP_STORE_PATH: "/app/data/push-apps.json"
 ```
 
 **WebSocket 服务**（8089 / 9090 / 9091 三个端口都要映射）：
 
 ```bash
 cd nexus-websocket
-docker compose up -d --build
+docker compose up -d --build     # 构建并启动
+docker compose logs -f           # 看日志
+docker compose down              # 停掉
 ```
 
 ```yaml
@@ -145,13 +154,15 @@ services:
     build:
       context: ..
       dockerfile: nexus-websocket/Dockerfile
-    image: simonking/nexus-websocket:1.0.0
+    image: simonking/nexus-websocket:latest
     container_name: nexus-websocket
     restart: unless-stopped
     ports:
       - "8089:8089"      # HTTP：管理页 / REST 推送入口
       - "9090:9090"      # Netty WebSocket：终端长连接
       - "9091:9091"      # Netty TCP：业务系统长连接
+    volumes:
+      - ./data:/app/data    # 推送应用台账落盘，容器重建后仍在
     environment:
       TZ: Asia/Shanghai
       SERVER_PORT: 8089
@@ -167,18 +178,25 @@ services:
 ```bash
 cd nexus-sse
 ./scripts/docker-build.sh                     # Windows: scripts\docker-build.cmd
-docker run -d --name nexus-sse -p 8088:8088 simonking/nexus-sse:1.0.0
+docker run -d --name nexus-sse -p 8088:8088 \
+  -v ./data:/app/data \
+  -e NEXUS_SSE_APP_STORE_PATH=/app/data/push-apps.json \
+  simonking/nexus-sse:latest
 
 cd ../nexus-websocket
 ./scripts/docker-build.sh
 docker run -d --name nexus-websocket -p 8089:8089 -p 9090:9090 -p 9091:9091 \
-  simonking/nexus-websocket:1.0.0
+  -v ./data:/app/data \
+  -e NEXUS_WS_APP_STORE_PATH=/app/data/push-apps.json \
+  simonking/nexus-websocket:latest
 ```
 
 要点：
 
 - **构建上下文是仓库根目录**：两个模块的父 POM 在根目录且都依赖 `nexus-common`，所以编排里是 `context: ..` + `dockerfile: nexus-xxx/Dockerfile`；**不要在模块目录下直接 `docker build .`**。
-- **多阶段构建**：Maven 镜像负责打包，JRE 镜像只跑运行时，最终镜像不含 Maven 与源码；非 root（uid 1000）+ `exec java` 保证 1 号进程能收到 SIGTERM 优雅停机。
+- **多阶段构建**：Maven 镜像负责打包，JRE 镜像只跑运行时，最终镜像不含 Maven 与源码；容器以 **root** 运行（未切 `USER`），`exec java` 保证 1 号进程能收到 SIGTERM 优雅停机。
+- **镜像标签用 `latest`**：编排与脚本都打 `simonking/nexus-sse:latest`、`simonking/nexus-websocket:latest`，本地起服务直接用 `docker compose up -d --build`。
+- **台账落盘**：两个服务的推送应用台账都写到容器内 `/app/data/push-apps.json`，编排里挂到宿主机 `./data`；删掉该目录等于清空新增的应用，备份 / 迁移直接拷目录。
 - **配置一律用环境变量覆盖**（Spring 宽松绑定）：`nexus.sse.heartbeat-interval` → `NEXUS_SSE_HEARTBEAT_INTERVAL`，`nexus.ws.tcp-port` → `NEXUS_WS_TCP_PORT`。
 - **反向代理**：SSE 必须关掉 `proxy_buffering`；WebSocket 必须带上 `Upgrade` / `Connection` 头且 `proxy_read_timeout` 大于心跳间隔；9091 是裸 TCP（非 HTTP），反向代理无法按路径转发，需四层转发（`stream` 模块）或直连。
 - 编排里的令牌是明文示例，生产请用 docker secret / 外部 env 文件挂载；改版本号时同步 `Dockerfile` 的 `ARG JAR_VERSION`。

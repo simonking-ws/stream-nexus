@@ -36,20 +36,22 @@ FROM eclipse-temurin:17-jre-jammy
 # SERVER_PORT 走 Spring 宽松绑定（SERVER_PORT -> server.port），改端口不必重新打镜像
 ENV TZ=Asia/Shanghai \
     SERVER_PORT=8088 \
+    # 推送应用台账：容器里必须给绝对路径。相对路径会挂到「jar 所在目录的上两级」，
+    # 而 jar 在 /app/app.jar，推出来是根目录 /，非 root 用户写不进去（首次启动落盘会失败）
+    NEXUS_SSE_APP_STORE_PATH=/app/data/push-apps.json \
     # 容器感知 JDK17 默认开启，这里只给个稳妥的堆上限；JAVA_OPTS 可在运行时整体覆盖
     JAVA_OPTS="-XX:MaxRAMPercentage=75 -Djava.security.egd=file:/dev/./urandom"
 
 RUN groupadd --system --gid 1000 nexus \
     && useradd --system --uid 1000 --gid nexus --no-create-home nexus \
-    && mkdir -p /app && chown nexus:nexus /app
+    && mkdir -p /app /app/data && chown -R nexus:nexus /app
 
 WORKDIR /app
 
 COPY --from=build /app.jar /app/app.jar
 
-# 非 root 运行
-USER nexus
-
+# 以 root 运行：不切 USER，容器默认即 root
+# （落盘目录 /app/data 挂到宿主机，root 写文件免权限问题；需要非 root 时再加 USER nexus）
 EXPOSE 8088
 
 # 无 curl / wget 的基础镜像，用 bash 的 /dev/tcp 直接探活：
