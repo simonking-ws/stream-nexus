@@ -17,6 +17,8 @@ target
 # 注意：nexus-sse/Dockerfile 由 docker build -f 指定，不能在这里排除，否则构建时读不到
 nexus-sse/scripts
 nexus-sse/docker-compose.yml
+nexus-websocket/scripts
+nexus-websocket/docker-compose.yml
 
 README.md
 LICENSE

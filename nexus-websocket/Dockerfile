@@ -17,6 +17,10 @@ WORKDIR /build
 COPY pom.xml ./
 COPY nexus-common/pom.xml nexus-common/
 COPY nexus-websocket/pom.xml nexus-websocket/
+# 根 POM 的 <modules> 必须全部存在，否则 Maven 读根 POM 就报 "Child module ... does not exist"。
+# 这两个模块不参与 -pl nexus-websocket 的构建，只拷 POM 即可（不拷 src，避免被无关改动打穿缓存）
+COPY nexus-sse/pom.xml nexus-sse/
+COPY nexus-client/pom.xml nexus-client/
 
 COPY nexus-common/src nexus-common/src
 COPY nexus-websocket/src nexus-websocket/src
