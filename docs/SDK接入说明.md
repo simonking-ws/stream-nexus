@@ -146,7 +146,7 @@ client.close();
 
 **鉴权必填**：两个服务的推送接口都走 HTTP 端口（可能经网关暴露），分别要求
 `X-Sse-AppId` + `X-Sse-Key`（SSE）与 `X-Ws-AppId` + `X-Ws-Key`（WebSocket）。
-builder 里的默认值是两个服务各自内置的默认应用 `test / test_secret`（开箱即用），
+builder 里的默认值是两个服务各自内置的默认应用 `test-demo / c3RyZWFtLW5leHVz`（开箱即用），
 **生产环境务必换成各管理界面「推送应用」页签下发的应用**。
 
 ### 3.3 推送（TCP 长连接）
@@ -244,9 +244,9 @@ Bootstrap -> NioSocketChannel
 | 方法 | 默认值 | 说明 |
 | --- | --- | --- |
 | `sseBaseUrl` | `http://127.0.0.1:8088` | SSE 服务根地址；结尾 `/` 会被去掉，`/sse/push` 自动拼上 |
-| `sseAppId` / `sseApiKey` | `test` / `test_secret` | SSE 服务的推送应用凭证 |
+| `sseAppId` / `sseApiKey` | `test-demo` / `c3RyZWFtLW5leHVz` | SSE 服务的推送应用凭证 |
 | `wsBaseUrl` | `http://127.0.0.1:8089` | WebSocket 服务根地址；结尾 `/` 会被去掉，`/ws/push` 自动拼上 |
-| `wsAppId` / `wsApiKey` | `test` / `test_secret` | WebSocket 服务的推送应用凭证 |
+| `wsAppId` / `wsApiKey` | `test-demo` / `c3RyZWFtLW5leHVz` | WebSocket 服务的推送应用凭证 |
 
 > 两组参数<b>不共享</b>：两个服务各有一张推送应用表，凭证各自独立，
 > 只在 SSE 注册过的应用去推 WebSocket 会得到 401（反之亦然）。

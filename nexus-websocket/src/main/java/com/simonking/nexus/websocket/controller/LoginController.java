@@ -1,7 +1,7 @@
-package com.simonking.stream.nexus.sse.controller;
+package com.simonking.nexus.websocket.controller;
 
-import com.simonking.stream.nexus.sse.auth.AdminAuthFilter;
-import com.simonking.stream.nexus.sse.config.AdminAuthProperties;
+import com.simonking.nexus.websocket.auth.AdminAuthFilter;
+import com.simonking.nexus.websocket.config.AdminAuthProperties;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
@@ -50,7 +50,7 @@ public class LoginController {
         if (isLoggedIn(request)) {
             return "redirect:" + target;
         }
-        model.addAttribute("title", "登录 · SSE · Stream Nexus");
+        model.addAttribute("title", "登录 · WS · Stream Nexus");
         model.addAttribute("error", error != null);
         model.addAttribute("redirect", target);
         return "login";

@@ -6,6 +6,22 @@
     <title th:text="${title}">WebSocket 推送测试</title>
     <meta name="color-scheme" content="dark">
     <link rel="stylesheet" th:href="@{/css/nexus-tech.css}">
+    <script>
+        /* 主题必须在渲染前落地：nexus-tech.js 在 body 末尾，等它跑会先闪一帧深色。
+           这里只做「读取 + 打属性」，不碰 DOM 其余部分；按钮由 nexus-tech.js 挂载 */
+        (function () {
+            try {
+                // 默认深色（本项目的视觉基线），只有手动切换过才记在 localStorage
+                var t = localStorage.getItem('nexus-theme');
+                if (t !== 'light' && t !== 'dark') t = 'dark';
+                document.documentElement.setAttribute('data-theme', t);
+                var m = document.querySelector('meta[name="color-scheme"]');
+                if (m) m.setAttribute('content', t === 'light' ? 'light' : 'dark');
+            } catch (e) {
+                // 存储不可用时保持默认深色，不影响后续使用
+            }
+        })();
+    </script>
     <style>
         /* 推送测试页私有补充：公共科技感主题（深色 / 霓虹 / 动效）见 /css/nexus-tech.css */
         input[type=text], select, textarea { width: 100%; }
@@ -22,22 +38,40 @@
         .url-row input { flex: 1 1 auto; min-width: 0; }
         .url-row button { flex: none; white-space: nowrap; }
 
+        /* 客户端ID 是服务端分配的 36 位 UUID，跟按钮挤在同一行会把整行顶换行：单独占一行。
+           「复制」按钮也在这行，.row button 默认 100px 宽，这里收成自适应 */
+        .row-full { flex: 1 1 100%; min-width: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .row-full button { width: auto; flex: none; }
+
         .hint-block { color: var(--muted); font-size: 12px; line-height: 1.8; }
         code { color: var(--brand); font-family: Consolas, "SFMono-Regular", monospace; }
+
+        /* hidden 属性必须显式兜底：公共主题里 .field / .grid / .url-row 自带 display，
+           作者样式优先级高于 UA 的 [hidden]{display:none}，不补这条页签切换会失效 */
+        [hidden] { display: none !important; }
     </style>
 </head>
 <body>
 
 <div class="topbar">
-    <div class="brand"><span class="logo">WS</span> <span class="brand-text">Stream Nexus</span></div>
+    <div class="brand">
+        <span class="logo"><img class="logo-img" th:src="@{/images/logo.png}" alt="N" /></span>
+        <span class="brand-text">Stream Nexus</span>
+        <!-- 服务标识：图标统一后靠它区分两个服务，避免开着两个页面认不出自己在哪 -->
+        <span class="svc-tag">WebSocket</span>
+    </div>
+    <!-- 导航一律新开标签页：本页跳转会丢掉 WebSocket 连接（连接状态、clientId、日志全没），
+         而两个页面又经常要对着看——一边盯连接台账 / 一边推消息 -->
     <div class="nav">
         <a th:href="@{/admin}" target="_blank" rel="noopener noreferrer"
            th:classappend="${active == 'admin'} ? 'active' : ''">连接管理</a>
-        <a th:href="@{/console}" th:classappend="${active == 'console'} ? 'active' : ''">推送测试</a>
+        <a th:href="@{/console}" target="_blank" rel="noopener noreferrer"
+           th:classappend="${active == 'console'} ? 'active' : ''">推送测试</a>
     </div>
     <div class="meta">
         <span class="live"><i></i>STREAM</span>
         <span th:text="'WS ' + ${wsPort} + ' · 心跳 ' + ${heartbeatInterval} + 's · 失联判定 ' + ${heartbeatTimeout} + 's'"></span>
+        <a class="logout" th:href="@{/logout}" title="退出登录：清空会话并回到登录页">退出</a>
     </div>
 </div>
 
@@ -49,33 +83,52 @@
 <span id="cfgAuthEnabled" hidden th:text="${authEnabled}"></span>
 
 <div class="wrap">
+    <!-- 连接与推送拆成两个页签：两者互不依赖（可以先推后连，也可以只看连接状态），
+         堆在一屏要来回滚动；消息日志记的是连接的收发，跟着连接页签显隐——
+         推送页签下没有连接，展示它只会让人误以为推送结果也要到那儿看。
+         切换不影响连接状态：推送结果照样写进日志，切回连接页签即可看到 -->
+    <div class="tabs">
+        <button id="tabBtnSub" class="active" onclick="switchTab('sub')">连接</button>
+        <button id="tabBtnPush" onclick="switchTab('push')">推送</button>
+    </div>
+
     <!-- ==================== 连接 ==================== -->
-    <div class="card live" id="cardSub">
+    <!-- live 不是写死的：建连后才挂上去（顶边亮线扫动），断开即收，见 setStatus() -->
+    <div class="card" id="cardSub">
         <h3 class="card-title">WebSocket 连接</h3>
         <p class="card-sub">模拟一个终端设备：建连 → 应答心跳 → 接收推送</p>
 
-        <div class="field">
-            <label>WebSocket 地址</label>
+        <!-- 地址模式：默认走系统地址（地址框不出现，订阅模块与建连令牌自动拼进地址）；
+             切到「自定义连接地址」用来测外部 WS 链接——外部服务不认本服务的 modules 订阅
+             与建连令牌，上行消息也是按本服务的模块约定上报，故三者一并隐藏，避免误导 -->
+        <div class="field-row" style="margin-bottom:12px">
+            <button id="urlModeBtn" onclick="toggleUrlMode()">自定义连接地址</button>
+            <span class="muted" id="urlModeTip" style="font-size:12px"></span>
+        </div>
+        <div class="field" id="fieldUrl" hidden>
+            <label>WebSocket 地址
+                <span class="hint">点「连接」时以输入框内容为准，可填外部 WS 链接</span>
+            </label>
             <div class="url-row">
                 <input type="text" id="wsUrl" spellcheck="false">
-                <button onclick="resetUrl()">重置地址</button>
+                <button onclick="resetUrl()" title="丢弃手填地址，回到系统默认地址">重置地址</button>
             </div>
             <div class="hint">
-                建连只需带订阅模块；客户端ID 由服务端在握手时分配，不需要前端传
+                客户端ID 由服务端在握手时分配，不需要前端传
             </div>
         </div>
 
-        <div class="grid grid-3" style="margin-top:14px">
-            <div class="field">
+        <div class="grid grid-3" id="gridConn" style="margin-top:14px">
+            <div class="field" id="fieldModules">
                 <label>订阅模块 <span class="hint">逗号分隔</span></label>
                 <input type="text" id="modules" value="test" oninput="resetUrl()">
             </div>
-            <div class="field">
+            <div class="field" id="fieldToken">
                 <label>建连令牌</label>
                 <input type="text" id="connToken" oninput="resetUrl()"
                        th:placeholder="${connectAuthEnabled} ? '必填：缺少令牌将无法建连' : '建连鉴权未开启，可留空'">
             </div>
-            <div class="field">
+            <div class="field" id="fieldUp">
                 <label>上行消息 <span class="hint">服务端回显一条 ws:echo</span></label>
                 <div class="field-row">
                     <input type="text" id="upText" placeholder='{"hello":"world"}'>
@@ -85,30 +138,27 @@
         </div>
 
         <!-- 服务端分配的客户端ID：建连后才填；断开即失效，重连会拿到新的 -->
-        <div class="field" style="margin-top:14px">
-            <label>客户端ID <span class="hint">服务端分配</span></label>
-            <div class="field-row">
-                <input type="text" id="clientId" value="未连接" readonly>
-                <button onclick="copyClientId()">复制</button>
-            </div>
-            <div class="hint">
-                定向推送的寻址依据；由服务端在握手时生成（UUID），<b>重连即换</b>，
-                要按用户维度稳定寻址请用模块订阅
-            </div>
-        </div>
-
         <div class="row" style="margin-top:14px">
             <button class="primary" onclick="connect()">连接</button>
             <button onclick="disconnect()">断开</button>
-            <span class="dot" id="dot"></span>
-            <span id="status" class="off">未连接</span>
+            <span><span class="dot" id="dot"></span>状态：<span id="status" class="off">未连接</span></span>
+            <span class="signal" id="signal" title="已建立长连接，等待服务端推送"><i></i><i></i><i></i><i></i></span>
             <span class="muted">心跳 <b id="pingCount">0</b> 次</span>
+            <!-- 客户端ID 独占一行：连上后是 36 位 UUID，挤在按钮后面会把整行顶换行，
+                 断开又缩回去，看着像样式在乱跳（与 SSE 推送测试页一致） -->
+            <span class="row-full muted">客户端ID（服务端分配）：<span class="cid" id="clientId">-</span>
+                <button onclick="copyClientId()" title="复制客户端ID：粘到定向推送里验证">复制</button>
+            </span>
+            <span class="row-full muted" style="font-size:12px">
+                定向推送的寻址依据；由服务端在握手时生成（UUID），<b>重连即换</b>，
+                要按用户维度稳定寻址请用模块订阅
+            </span>
         </div>
         <div class="err" id="connTip"></div>
     </div>
 
-    <!-- ==================== 推送 ==================== -->
-    <div class="card">
+    <!-- ==================== 推送（独立页签） ==================== -->
+    <div class="card" id="cardPush" hidden>
         <h3 class="card-title">推送消息</h3>
         <p class="card-sub">走 REST 接口 <code th:text="${pushPath}">/ws/push</code>；业务系统接入也是调这个接口</p>
 
@@ -135,8 +185,11 @@
             <div class="field">
                 <label>定向推送</label>
                 <label class="hint" style="display:flex;align-items:center;gap:6px;font-size:12px">
-                    <input type="checkbox" id="directOnly" checked style="width:14px"> 只推给当前连接
+                    <input type="checkbox" id="directOnly" checked onchange="refreshDirectTip()" style="width:14px">
+                    只推给当前连接
                 </label>
+                <!-- clientId 显示在连接页签里，推送页签下看不到：这一行告诉当前到底会推给谁 -->
+                <div class="hint" id="directTip"></div>
             </div>
             <div class="field">
                 <label>&nbsp;</label>
@@ -154,12 +207,13 @@
         <div class="sub" id="pushTip"></div>
     </div>
 
-    <!-- ==================== 日志 ==================== -->
-    <div class="card">
+    <!-- ==================== 日志（跟随连接页签） ==================== -->
+    <div class="card" id="cardLog">
         <h3 class="card-title">消息日志</h3>
         <p class="card-sub">
             下行：<code>CONNECTED</code> 建连回执 · <code>MESSAGE</code> 业务消息 ·
-            <code>PING</code> 心跳（客户端自动回 PONG）
+            <code>PING</code> 心跳（客户端自动回 PONG）<br>
+            最新的在最上面，往下滚是更早的记录
         </p>
         <div class="row" style="margin-bottom:10px">
             <button onclick="clearLog()">清空</button>
@@ -220,14 +274,54 @@
     const connectAuthEnabled = () => cfg('cfgConnectAuthEnabled') === 'true';
     const authEnabled = () => cfg('cfgAuthEnabled') === 'true';
 
+    /* ================= 页签 ================= */
+    /**
+     * 页签切换：连接 / 推送二选一
+     *
+     * <p>消息日志跟着连接页签显隐：它记的是这条 WebSocket 连接的收发（建连回执、心跳、下行消息），
+     * 推送页签下没有连接，展示它没意义。
+     *
+     * <p>切换<b>不影响连接状态</b>：切到推送页签时心跳照旧、连接不断，推送结果写进日志后
+     * 切回连接页签即可看到。
+     */
+    function switchTab(name) {
+        const isSub = name === 'sub';
+        $('cardSub').hidden = !isSub;
+        $('cardLog').hidden = !isSub;
+        $('cardPush').hidden = isSub;
+        $('tabBtnSub').className = isSub ? 'active' : '';
+        $('tabBtnPush').className = isSub ? '' : 'active';
+        if (!isSub) refreshDirectTip();
+    }
+
+    /**
+     * 定向推送的实际去向：clientId 由服务端分配、只显示在连接页签，
+     * 推送页签下必须有一行说明「勾选了但没连上」会退化成按模块广播，
+     * 否则很容易误以为只推给了自己，实际推给了所有订阅该模块的连接。
+     */
+    function refreshDirectTip() {
+        const tip = $('directTip');
+        if (!$('directOnly').checked) {
+            tip.textContent = '未勾选：按业务模块广播给所有订阅该模块的连接';
+        } else if (clientId) {
+            tip.textContent = '当前连接：' + clientId;
+        } else {
+            tip.textContent = '未连接，勾选无效：将按业务模块广播';
+        }
+    }
+
     /* ================= 地址 ================= */
     function wsHost() {
         return cfg('cfgPublicEndpoint') || (location.hostname + ':' + cfg('cfgWsPort'));
     }
 
+    /**
+     * 系统默认地址：ws://host:port/path，带上订阅模块与建连令牌
+     *
+     * <p>只带订阅模块：客户端ID 由服务端分配，不进地址
+     */
     function buildUrl() {
         const url = new URL('ws://' + wsHost() + cfg('cfgWsPath'));
-        // 只带订阅模块：客户端ID 由服务端分配，不进地址
         url.searchParams.set('modules', $('modules').value || '*');
         if (connectAuthEnabled() && $('connToken').value.trim()) {
             url.searchParams.set('token', $('connToken').value.trim());
@@ -235,8 +329,45 @@
         return url;
     }
 
+    /** 回填系统默认地址：模块 / 令牌改动、切模式、点「重置地址」都走这里 */
     function resetUrl() {
         $('wsUrl').value = buildUrl().toString();
+    }
+
+    /** 地址模式：false = 系统地址（默认）；true = 自定义地址（测外部 WS 链接用） */
+    let useCustomUrl = false;
+
+    /**
+     * 应用当前地址模式（切换与首屏都走这里）
+     *
+     * <p>自定义地址是给外部 WS 链接用的：外部服务不认本服务的 modules 订阅、建连令牌，
+     * 也不按本服务的模块约定回显上行消息，这三项填了都不会生效，故一并隐藏，
+     * 避免「配了没反应」的误导。
+     */
+    function applyUrlMode() {
+        $('fieldUrl').hidden = !useCustomUrl;
+        // 三格在自定义态全隐：容器一并收起，否则会留下一段空行距
+        $('gridConn').hidden = useCustomUrl;
+        $('fieldModules').hidden = useCustomUrl;
+        $('fieldToken').hidden = useCustomUrl;
+        $('fieldUp').hidden = useCustomUrl;
+        const btn = $('urlModeBtn');
+        btn.textContent = useCustomUrl ? '系统连接地址' : '自定义连接地址';
+        btn.className = useCustomUrl ? 'primary' : '';   // 自定义态用主色：提醒当前连的不是本站
+        $('urlModeTip').textContent = useCustomUrl
+            ? '自定义：地址可手改，用来测外部 WebSocket 链接'
+            : '系统：ws://' + wsHost() + cfg('cfgWsPath') + '（订阅模块与建连令牌自动拼进地址）';
+        // 两种模式都重拼一次：切到自定义时以系统地址为起点，切回系统时丢掉上一次手填的外部地址
+        resetUrl();
+    }
+
+    /** 切换系统地址 / 自定义地址 */
+    function toggleUrlMode() {
+        useCustomUrl = !useCustomUrl;
+        applyUrlMode();
+        log(useCustomUrl
+            ? '已切到自定义连接地址：订阅模块、建连令牌与上行消息对外部链接不适用，已隐藏'
+            : '已切回系统连接地址：ws://' + wsHost() + cfg('cfgWsPath'), true);
     }
 
     /** 复制服务端分配的客户端ID，方便粘到定向推送里验证 */
@@ -251,13 +382,25 @@
     }
 
     /* ================= 日志 ================= */
+    /**
+     * 写一行日志：<b>最新的插在最上面</b>
+     *
+     * <p>倒序是因为这条连接上大部分内容是心跳（15s 一条），正序排列时真正要看的回执
+     * （建连回执、推送结果、上行回显）会被顶到下面，得每次手动滚到底才知道有没有成功。
+     * 反过来最新的一条永远在第一屏，扫一眼即可。
+     *
+     * <p>已经滚下去看历史时不能直接弹回顶部：头插会把已有内容整体下推，
+     * 补上新行的高度才能停在原来那一行上（视线不跳）。
+     */
     function log(text, highlight) {
         const box = $('log');
         const line = document.createElement('div');
         line.className = 'line' + (highlight ? ' ok-text' : '');
         line.textContent = '[' + new Date().toLocaleTimeString('zh-CN', {hour12: false}) + '] ' + text;
-        box.appendChild(line);
-        box.scrollTop = box.scrollHeight;
+
+        const reading = box.scrollTop > 0;   // 用户正翻着历史，别把他拽回顶部
+        box.insertBefore(line, box.firstChild);
+        box.scrollTop = reading ? box.scrollTop + line.offsetHeight : 0;
     }
 
     function clearLog() {
@@ -265,22 +408,31 @@
     }
 
     /* ================= 连接 ================= */
+    /**
+     * 连接态：状态点 / 信号条 / 卡片顶边亮线三者一起翻面（与 SSE 推送测试页同一套观感）
+     *
+     * <p>卡片不再写死 live：未连接时卡片保持静态，连上才亮并扫线，断开立刻收起来
+     */
     function setStatus(text, on) {
         $('status').textContent = text;
         $('status').className = on ? 'on' : 'off';
         $('dot').className = 'dot' + (on ? ' on' : '');
+        $('signal').className = 'signal' + (on ? ' on' : '');
+        $('cardSub').classList.toggle('live', !!on);
     }
 
     function connect() {
         if (ws) return;
-        if (connectAuthEnabled() && !$('connToken').value.trim()) {
+        // 自定义地址可能指向外部服务：本服务的建连令牌约定不适用，不再强校验
+        if (!useCustomUrl && connectAuthEnabled() && !$('connToken').value.trim()) {
             $('connTip').textContent = TOKEN_MISSING_TIP;
             log('连接失败：' + TOKEN_MISSING_TIP);
             $('connToken').focus();
             return;
         }
         $('connTip').textContent = '';
-        resetUrl();
+        // 系统态按当前模块 / 令牌重拼；自定义态以输入框内容为准，不能被覆盖
+        if (!useCustomUrl) resetUrl();
 
         try {
             ws = new WebSocket($('wsUrl').value);
@@ -322,7 +474,8 @@
             if (msg.event === EVT_CONNECTED) {
                 // 服务端分配的客户端ID：定向推送的寻址依据，断开即失效
                 clientId = (msg.data && msg.data.clientId) || '';
-                $('clientId').value = clientId || '未连接';
+                $('clientId').textContent = clientId || '-';
+                refreshDirectTip();
                 log('建连回执：' + JSON.stringify(msg.data), true);
                 return;
             }
@@ -330,6 +483,11 @@
         };
 
         ws.onerror = () => {
+            // 自定义地址连的是外部服务：报「令牌不正确」是误导（外部服务根本不认我们的令牌）
+            if (useCustomUrl) {
+                setStatus('异常', false);
+                return;
+            }
             setStatus(connectAuthEnabled() ? '未授权' : '异常', false);
             if (connectAuthEnabled()) {
                 $('connTip').textContent = '连接被拒：令牌不正确或地址不可达';
@@ -337,10 +495,12 @@
         };
 
         ws.onclose = event => {
-            setStatus('已断开 (' + event.code + ')', false);
+            setStatus('已断开', false);
             log('连接关闭, code=' + event.code + ', reason=' + (event.reason || '-'));
             ws = null;
-            clientId = '';
+            clientId = '';   // 断开即失效：下次建连服务端会重新分配一个 UUID
+            $('clientId').textContent = '-';
+            refreshDirectTip();
         };
     }
 
@@ -356,6 +516,20 @@
         setStatus('已断开', false);
     }
 
+    /**
+     * 上行消息的业务模块：取订阅模块里的第一个
+     *
+     * <p>不能用推送页签的 bizModule——那是「推送给谁」的寻址字段，与「这条上行消息属于哪个模块」
+     * 是两回事；拆成页签后两者也不在同一屏，借用它更说不通。
+     */
+    function upModule() {
+        const first = ($('modules').value || '')
+                .split(',')
+                .map(s => s.trim())
+                .filter(Boolean)[0];
+        return first || 'test';
+    }
+
     function sendUp() {
         if (!ws || ws.readyState !== WebSocket.OPEN) {
             log('未连接，无法发送');
@@ -369,7 +543,7 @@
             /* 非 JSON 时按字符串原样上报 */
         }
         ws.send(JSON.stringify({
-            event: EVT_MESSAGE, bizModule: $('bizModule').value || 'test',
+            event: EVT_MESSAGE, bizModule: upModule(),
             action: 'up', ts: Date.now(), data: data
         }));
         log('已发送上行消息：' + text);
@@ -410,7 +584,14 @@
         }
         data.ts = Date.now();   // ts 由页面统一填充：客户端据此丢弃乱序 / 旧消息
         const body = {bizModule: $('bizModule').value.trim(), action: $('action').value.trim(), data: data};
-        if ($('directOnly').checked && clientId) body.clientIds = [clientId];
+        if ($('directOnly').checked) {
+            if (clientId) {
+                body.clientIds = [clientId];
+            } else {
+                // 没连上却勾了定向：不能静默退化成广播，否则会误以为只推给了自己
+                log('未建连，定向推送未生效：本次按业务模块广播');
+            }
+        }
 
         $('pushTip').textContent = '推送中 ...';
         try {
@@ -443,8 +624,10 @@
         if (app) $('appKey').value = app.apiKey || '';
     };
 
-    resetUrl();
+    // 首屏走系统地址：地址框隐藏，订阅模块与建连令牌自动拼进地址
+    applyUrlMode();
     loadApps();
+    refreshDirectTip();
 </script>
 </body>
 </html>

@@ -38,7 +38,7 @@ public class RestPushDemo {
                 .wsBaseUrl("http://127.0.0.1:8089")
                 // 两个服务各自内置的默认应用（生产环境换成各管理界面「推送应用」页签下发的）
                 .sseAppId("test-demo").sseApiKey("c3RyZWFtLW5leHVz")
-                .wsAppId("test").wsApiKey("test_secret")
+                .wsAppId("test-demo").wsApiKey("c3RyZWFtLW5leHVz")
                 .build();
 
         final AtomicInteger seq = new AtomicInteger();

@@ -30,6 +30,13 @@
             <artifactId>netty-all</artifactId>
         </dependency>
 
+        <!-- IP 归属地（城市）：台账里给客户端 IP 补来源。
+             数据文件 ip2region.xdb 需自备（不入仓库），缺失时城市列降级为 -，不影响启动 -->
+        <dependency>
+            <groupId>org.lionsoul</groupId>
+            <artifactId>ip2region</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

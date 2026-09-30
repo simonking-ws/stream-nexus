@@ -1,5 +1,6 @@
 package com.simonking.nexus.websocket;
 
+import com.simonking.nexus.websocket.config.AdminAuthProperties;
 import com.simonking.nexus.websocket.config.WsProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -21,7 +22,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
  * @author simonking
  */
 @SpringBootApplication
-@EnableConfigurationProperties(WsProperties.class)
+@EnableConfigurationProperties({WsProperties.class, AdminAuthProperties.class})
 public class NexusWebsocketApplication {
 
     public static void main(String[] args) {

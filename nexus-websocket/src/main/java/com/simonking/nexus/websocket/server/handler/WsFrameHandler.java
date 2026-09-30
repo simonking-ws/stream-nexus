@@ -121,7 +121,6 @@ public class WsFrameHandler extends SimpleChannelInboundHandler<TextWebSocketFra
      * 连接断开：从注册表里移除
      */
     @Override
-
     public void channelInactive(ChannelHandlerContext ctx) {
         String clientId = ctx.channel().attr(WsChannelKeys.CLIENT_ID).get();
         if (clientId != null && registry.contains(clientId)) {

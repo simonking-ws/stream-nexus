@@ -24,6 +24,9 @@ services:
       - "8089:8089"
       - "9090:9090"
       - "9091:9091"
+    # 推送应用台账挂到宿主机：容器重建后新增的应用还在（不挂则随容器消失）
+    volumes:
+      - ./data:/app/data
     environment:
       TZ: Asia/Shanghai
       JAVA_OPTS: "-XX:MaxRAMPercentage=75"
@@ -42,6 +45,12 @@ services:
       NEXUS_WS_CONNECT_AUTH_TOKEN: "U3RyZWFtTmV4dXM="
       # 控制台页面拼接 ws:// 地址用；留空则取浏览器 hostname + 9090
       NEXUS_WS_PUBLIC_ENDPOINT: ""
+      # 管理页登录：/admin、/console 与 /ws/admin/** 需登录；部署务必改掉默认口令
+      NEXUS_WS_ADMIN_AUTH_ENABLED: "true"
+      NEXUS_WS_ADMIN_USERNAME: "admin"
+      NEXUS_WS_ADMIN_PASSWORD: "adminws"
+      # 推送应用台账落盘位置（容器内绝对路径，已挂到宿主机 ./data）
+      NEXUS_WS_APP_STORE_PATH: "/app/data/push-apps.json"
 
 # 注意：
 # 1. 上面的令牌是明文示例，生产请用 docker secret / 外部 env 文件挂载，别提交真实口令。

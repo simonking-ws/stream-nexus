@@ -42,6 +42,11 @@
         .row-full { flex: 1 1 100%; min-width: 0; }
         #connTip { flex: 1 1 100%; }
 
+        /* 接入说明的行文样式：次要色正文 + 品牌色行内代码（只在本块内生效，
+           不去动公共主题里 .conn-note code 那套告警色） */
+        .hint-block { color: var(--muted); font-size: 12px; line-height: 1.9; }
+        .hint-block code { color: var(--brand); font-family: Consolas, "SFMono-Regular", monospace; }
+
         /* hidden 属性必须显式兜底：公共主题里 .field / .grid 自带 display，
            作者样式优先级高于 UA 的 [hidden]{display:none}，不补这条字段加了 hidden 照样显示 */
         [hidden] { display: none !important; }
@@ -72,7 +77,12 @@
 <body>
 
 <div class="topbar">
-    <div class="brand"><span class="logo">SSE</span> <span class="brand-text">Stream Nexus</span></div>
+    <div class="brand">
+        <span class="logo"><img class="logo-img" th:src="@{/images/logo.png}" alt="N" /></span>
+        <span class="brand-text">Stream Nexus</span>
+        <!-- 服务标识：图标统一后靠它区分两个服务，避免开着两个页面认不出自己在哪 -->
+        <span class="svc-tag">SSE</span>
+    </div>
     <div class="nav">
         <a th:href="@{/admin}" th:classappend="${active == 'admin'} ? 'active' : ''">连接管理</a>
         <!-- 推送测试新开标签页：管理页和它经常要对着看（一边看连接台账一边推消息） -->
@@ -205,6 +215,31 @@
         </div>
         <div id="eventsTip" class="muted" style="margin-bottom:10px"></div>
         <div id="log"></div>
+    </div>
+
+    <!-- ==================== 接入说明 ==================== -->
+    <!-- 与页签无关，常驻展示：这里是「业务系统怎么接」的口径，切到推送页签时正好对着看。
+         心跳秒数取服务端下发值，改配置这里跟着变，不会出现文档与实现对不上 -->
+    <div class="card">
+        <h3 class="card-title">接入说明</h3>
+        <div class="hint-block">
+            1. 终端（浏览器 / H5 / App）订阅 <code>GET /sse/subscribe?modules=test</code>，
+            <b>modules 必须写在 query 里</b>——浏览器断线自动重连会原样复用 URL，订阅模块靠它保住；<br>
+            2. clientId 由<b>服务端</b>在建连时分配（UUID），随建连回执
+            <code>bizModule=sse · action=connected</code> 下发；前端不用生成，也不要拼进地址；<br>
+            3. 心跳是<b>应用级</b>的，且 SSE 是单向通道：客户端收到 <code>event: PING</code>（每
+            <span th:text="${heartbeatInterval}">15</span>s 一条）后必须回调
+            <code>POST /sse/pong?clientId=xxx</code> 回 PONG，不能写回 SSE 连接本身；超过
+            <span th:text="${heartbeatTimeout}">90</span>s 无应答即判定失联并回收连接；<br>
+            4. 业务系统调用 <code>POST /sse/push</code>（请求头 <code>X-Sse-AppId</code> /
+            <code>X-Sse-Key</code>）即可推送，无需感知长连接；<code>bizModule</code>
+            必须在该应用白名单内（不在则 403），<code>clientIds</code> 用于定向，两者可同时给、命中并集；<br>
+            5. clientId <b>重连即换</b>：要按用户维度稳定寻址请用<b>模块订阅</b>，
+            或在业务系统侧维护「用户 → 当前 clientId」的映射（终端每次建连后上报刷新）；<br>
+            6. <code>es.onopen</code> 里必须<b>重拉全量业务状态</b>：本服务无消息历史、不补发，
+            只保证在线期间的增量实时；反向代理（Nginx）需 <code>proxy_buffering off</code>，
+            否则消息会攒在缓冲区不下发。
+        </div>
     </div>
 </div>
 
