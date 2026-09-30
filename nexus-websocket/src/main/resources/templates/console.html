@@ -98,28 +98,37 @@
         <h3 class="card-title">WebSocket 连接</h3>
         <p class="card-sub">模拟一个终端设备：建连 → 应答心跳 → 接收推送</p>
 
-        <div class="field">
-            <label>WebSocket 地址</label>
+        <!-- 地址模式：默认走系统地址（地址框不出现，订阅模块与建连令牌自动拼进地址）；
+             切到「自定义连接地址」用来测外部 WS 链接——外部服务不认本服务的 modules 订阅
+             与建连令牌，上行消息也是按本服务的模块约定上报，故三者一并隐藏，避免误导 -->
+        <div class="field-row" style="margin-bottom:12px">
+            <button id="urlModeBtn" onclick="toggleUrlMode()">自定义连接地址</button>
+            <span class="muted" id="urlModeTip" style="font-size:12px"></span>
+        </div>
+        <div class="field" id="fieldUrl" hidden>
+            <label>WebSocket 地址
+                <span class="hint">点「连接」时以输入框内容为准，可填外部 WS 链接</span>
+            </label>
             <div class="url-row">
                 <input type="text" id="wsUrl" spellcheck="false">
-                <button onclick="resetUrl()">重置地址</button>
+                <button onclick="resetUrl()" title="丢弃手填地址，回到系统默认地址">重置地址</button>
             </div>
             <div class="hint">
-                建连只需带订阅模块；客户端ID 由服务端在握手时分配，不需要前端传
+                客户端ID 由服务端在握手时分配，不需要前端传
             </div>
         </div>
 
-        <div class="grid grid-3" style="margin-top:14px">
-            <div class="field">
+        <div class="grid grid-3" id="gridConn" style="margin-top:14px">
+            <div class="field" id="fieldModules">
                 <label>订阅模块 <span class="hint">逗号分隔</span></label>
                 <input type="text" id="modules" value="test" oninput="resetUrl()">
             </div>
-            <div class="field">
+            <div class="field" id="fieldToken">
                 <label>建连令牌</label>
                 <input type="text" id="connToken" oninput="resetUrl()"
                        th:placeholder="${connectAuthEnabled} ? '必填：缺少令牌将无法建连' : '建连鉴权未开启，可留空'">
             </div>
-            <div class="field">
+            <div class="field" id="fieldUp">
                 <label>上行消息 <span class="hint">服务端回显一条 ws:echo</span></label>
                 <div class="field-row">
                     <input type="text" id="upText" placeholder='{"hello":"world"}'>
@@ -203,7 +212,8 @@
         <h3 class="card-title">消息日志</h3>
         <p class="card-sub">
             下行：<code>CONNECTED</code> 建连回执 · <code>MESSAGE</code> 业务消息 ·
-            <code>PING</code> 心跳（客户端自动回 PONG）
+            <code>PING</code> 心跳（客户端自动回 PONG）<br>
+            最新的在最上面，往下滚是更早的记录
         </p>
         <div class="row" style="margin-bottom:10px">
             <button onclick="clearLog()">清空</button>
@@ -305,9 +315,13 @@
         return cfg('cfgPublicEndpoint') || (location.hostname + ':' + cfg('cfgWsPort'));
     }
 
+    /**
+     * 系统默认地址：ws://host:port/path，带上订阅模块与建连令牌
+     *
+     * <p>只带订阅模块：客户端ID 由服务端分配，不进地址
+     */
     function buildUrl() {
         const url = new URL('ws://' + wsHost() + cfg('cfgWsPath'));
-        // 只带订阅模块：客户端ID 由服务端分配，不进地址
         url.searchParams.set('modules', $('modules').value || '*');
         if (connectAuthEnabled() && $('connToken').value.trim()) {
             url.searchParams.set('token', $('connToken').value.trim());
@@ -315,8 +329,45 @@
         return url;
     }
 
+    /** 回填系统默认地址：模块 / 令牌改动、切模式、点「重置地址」都走这里 */
     function resetUrl() {
         $('wsUrl').value = buildUrl().toString();
+    }
+
+    /** 地址模式：false = 系统地址（默认）；true = 自定义地址（测外部 WS 链接用） */
+    let useCustomUrl = false;
+
+    /**
+     * 应用当前地址模式（切换与首屏都走这里）
+     *
+     * <p>自定义地址是给外部 WS 链接用的：外部服务不认本服务的 modules 订阅、建连令牌，
+     * 也不按本服务的模块约定回显上行消息，这三项填了都不会生效，故一并隐藏，
+     * 避免「配了没反应」的误导。
+     */
+    function applyUrlMode() {
+        $('fieldUrl').hidden = !useCustomUrl;
+        // 三格在自定义态全隐：容器一并收起，否则会留下一段空行距
+        $('gridConn').hidden = useCustomUrl;
+        $('fieldModules').hidden = useCustomUrl;
+        $('fieldToken').hidden = useCustomUrl;
+        $('fieldUp').hidden = useCustomUrl;
+        const btn = $('urlModeBtn');
+        btn.textContent = useCustomUrl ? '系统连接地址' : '自定义连接地址';
+        btn.className = useCustomUrl ? 'primary' : '';   // 自定义态用主色：提醒当前连的不是本站
+        $('urlModeTip').textContent = useCustomUrl
+            ? '自定义：地址可手改，用来测外部 WebSocket 链接'
+            : '系统：ws://' + wsHost() + cfg('cfgWsPath') + '（订阅模块与建连令牌自动拼进地址）';
+        // 两种模式都重拼一次：切到自定义时以系统地址为起点，切回系统时丢掉上一次手填的外部地址
+        resetUrl();
+    }
+
+    /** 切换系统地址 / 自定义地址 */
+    function toggleUrlMode() {
+        useCustomUrl = !useCustomUrl;
+        applyUrlMode();
+        log(useCustomUrl
+            ? '已切到自定义连接地址：订阅模块、建连令牌与上行消息对外部链接不适用，已隐藏'
+            : '已切回系统连接地址：ws://' + wsHost() + cfg('cfgWsPath'), true);
     }
 
     /** 复制服务端分配的客户端ID，方便粘到定向推送里验证 */
@@ -331,13 +382,25 @@
     }
 
     /* ================= 日志 ================= */
+    /**
+     * 写一行日志：<b>最新的插在最上面</b>
+     *
+     * <p>倒序是因为这条连接上大部分内容是心跳（15s 一条），正序排列时真正要看的回执
+     * （建连回执、推送结果、上行回显）会被顶到下面，得每次手动滚到底才知道有没有成功。
+     * 反过来最新的一条永远在第一屏，扫一眼即可。
+     *
+     * <p>已经滚下去看历史时不能直接弹回顶部：头插会把已有内容整体下推，
+     * 补上新行的高度才能停在原来那一行上（视线不跳）。
+     */
     function log(text, highlight) {
         const box = $('log');
         const line = document.createElement('div');
         line.className = 'line' + (highlight ? ' ok-text' : '');
         line.textContent = '[' + new Date().toLocaleTimeString('zh-CN', {hour12: false}) + '] ' + text;
-        box.appendChild(line);
-        box.scrollTop = box.scrollHeight;
+
+        const reading = box.scrollTop > 0;   // 用户正翻着历史，别把他拽回顶部
+        box.insertBefore(line, box.firstChild);
+        box.scrollTop = reading ? box.scrollTop + line.offsetHeight : 0;
     }
 
     function clearLog() {
@@ -360,14 +423,16 @@
 
     function connect() {
         if (ws) return;
-        if (connectAuthEnabled() && !$('connToken').value.trim()) {
+        // 自定义地址可能指向外部服务：本服务的建连令牌约定不适用，不再强校验
+        if (!useCustomUrl && connectAuthEnabled() && !$('connToken').value.trim()) {
             $('connTip').textContent = TOKEN_MISSING_TIP;
             log('连接失败：' + TOKEN_MISSING_TIP);
             $('connToken').focus();
             return;
         }
         $('connTip').textContent = '';
-        resetUrl();
+        // 系统态按当前模块 / 令牌重拼；自定义态以输入框内容为准，不能被覆盖
+        if (!useCustomUrl) resetUrl();
 
         try {
             ws = new WebSocket($('wsUrl').value);
@@ -418,6 +483,11 @@
         };
 
         ws.onerror = () => {
+            // 自定义地址连的是外部服务：报「令牌不正确」是误导（外部服务根本不认我们的令牌）
+            if (useCustomUrl) {
+                setStatus('异常', false);
+                return;
+            }
             setStatus(connectAuthEnabled() ? '未授权' : '异常', false);
             if (connectAuthEnabled()) {
                 $('connTip').textContent = '连接被拒：令牌不正确或地址不可达';
@@ -425,7 +495,7 @@
         };
 
         ws.onclose = event => {
-            setStatus('已断开 (' + event.code + ')', false);
+            setStatus('已断开', false);
             log('连接关闭, code=' + event.code + ', reason=' + (event.reason || '-'));
             ws = null;
             clientId = '';   // 断开即失效：下次建连服务端会重新分配一个 UUID
@@ -554,7 +624,8 @@
         if (app) $('appKey').value = app.apiKey || '';
     };
 
-    resetUrl();
+    // 首屏走系统地址：地址框隐藏，订阅模块与建连令牌自动拼进地址
+    applyUrlMode();
     loadApps();
     refreshDirectTip();
 </script>

@@ -47,14 +47,18 @@
     </div>
     <div class="meta">
         <span class="live"><i></i>LIVE</span>
-        <span th:text="'心跳 ' + ${heartbeatInterval} + 's · 失联判定 ' + ${heartbeatTimeout} + 's · 连接上限 ' + ${maxConnections} + ' · WS ' + ${wsPort}"></span>
+        <!-- 两条链的端口都写出来：终端走 WS，业务系统走 TCP，页面上不要再让人猜连的是哪个 -->
+        <span th:text="'心跳 ' + ${heartbeatInterval} + 's · 失联判定 ' + ${heartbeatTimeout} + 's · 连接上限 ' + ${maxConnections} + ' · WS ' + ${wsPort} + ' · TCP ' + ${tcpPort}"></span>
         <a class="logout" th:href="@{/logout}" title="退出登录：清空会话并回到登录页">退出</a>
     </div>
 </div>
 
 <div class="wrap">
+    <!-- 三个页签：终端 WS 与业务系统 TCP 分列——两者数量级差三个数量级、字段也完全不同
+         （客户端ID / 订阅模块 vs 通道ID / 报文数），混进一张表两边都看不清 -->
     <div class="tabs">
         <button id="tabConnBtn" class="active" onclick="switchTab('conn')">连接台账</button>
+        <button id="tabTcpBtn" onclick="switchTab('tcp')">TCP 接入</button>
         <button id="tabAppBtn" onclick="switchTab('app')">推送应用</button>
     </div>
 
@@ -65,6 +69,8 @@
                 <div class="stat">
                     <div class="label">在线连接</div>
                     <div class="num" id="total">-</div>
+                    <!-- 协议构成：总数看不出是多少终端 + 多少业务系统，而这边的增长含义完全不同 -->
+                    <div class="sub" id="totalSplit">-</div>
                 </div>
                 <div class="stat">
                     <div class="label">疑似失联</div>
@@ -135,6 +141,68 @@
         </div>
     </div>
 
+    <!-- ========== TCP 接入台账（业务系统长连接） ========== -->
+    <div id="tabTcp" hidden>
+        <div class="card">
+            <div class="stats">
+                <div class="stat">
+                    <div class="label">TCP 连接</div>
+                    <div class="num" id="tcpTotal">-</div>
+                    <div class="sub" id="tcpPort">-</div>
+                </div>
+                <div class="stat">
+                    <div class="label">疑似失联</div>
+                    <div class="num" id="tcpStaleCount">-</div>
+                </div>
+                <div class="stat">
+                    <div class="label">心跳超时</div>
+                    <div class="num" id="tcpHbTimeout">-</div>
+                </div>
+                <div class="stat">
+                    <div class="label">上次刷新</div>
+                    <div class="num sm" id="tcpRefreshAt">-</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card toolbar">
+            <button onclick="loadTcp()">刷新</button>
+            <input type="text" id="tcpKeyword" placeholder="过滤 通道ID / IP"
+                   oninput="renderTcp()" style="width:240px">
+            <label style="display:flex;align-items:center;gap:6px">
+                <input type="checkbox" id="tcpStaleOnly" onchange="renderTcp()"> 只看疑似失联
+            </label>
+            <span id="tcpTip" style="color:var(--muted);font-size:12px"></span>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th style="width:26%">通道ID</th>
+                    <th style="width:18%">客户端 IP</th>
+                    <th style="width:20%">建连时间</th>
+                    <th style="width:18%">静默 / 状态</th>
+                    <th style="width:18%">上行报文</th>
+                </tr>
+                </thead>
+                <tbody id="tcpBody"></tbody>
+            </table>
+            <!-- 空态给接入方式：这一页平时就是空的（没业务系统连），光写「暂无连接」会让人以为坏了 -->
+            <div class="empty" id="tcpEmpty" hidden>暂无 TCP 接入连接：业务系统引入 nexus-client SDK 后连此端口</div>
+        </div>
+
+        <div class="card">
+            <p class="card-sub">
+                TCP 接入（端口 <code th:text="${tcpPort}">9091</code>）是<b>业务系统侧</b>的长连接推送通道，
+                与终端的 WebSocket（端口 <code th:text="${wsPort}">9090</code>）分属两条流水线、两张注册表：
+                终端连 WS 收消息，业务系统连 TCP 交消息，协议在建连那一刻就定了，不存在混连。
+                这里<b>只做观测，不提供强制下线</b>——一条 TCP 连接背后是一整个业务系统，
+                掐断它等于掐断它的推送链路（终端连接可在「连接台账」里单条下线）。
+            </p>
+        </div>
+    </div>
+
     <!-- ========== 推送应用（新增 + 删除同一页签） ========== -->
     <div id="tabApp" hidden>
         <div class="card">
@@ -199,6 +267,9 @@
 <script>
     /* ================= 全局状态 ================= */
     let items = [], apps = [], meta = {}, defaultAppId = '';
+    // TCP 接入台账：与终端台账字段完全不同（通道ID / 报文数 vs 客户端ID / 订阅模块），
+    // 状态分开存，两套渲染互不干扰
+    let tcpItems = [], tcpMeta = {}, tcpKnownIds = null;
     // 当前处于编辑态的 appId：列表默认只读，只有点「修改」后才对这一行开启输入框
     let editingAppId = '';
     let knownIds = null;
@@ -308,12 +379,78 @@
     function applyInterval() {
         clearInterval(timer);
         const ms = Number($('interval').value);
-        if (ms > 0) timer = setInterval(load, ms);
+        // 两个台账一起刷：TCP 连接只有个位数，多一个请求换「切过去就是最新的」很划算
+        if (ms > 0) timer = setInterval(() => {
+            load();
+            loadTcp();
+        }, ms);
     }
 
     function paintUptime() {
         if (!meta.startTime) return;
         $('uptime').textContent = durationSec(Date.now() + serverSkew - meta.startTime);
+    }
+
+    /* ================= TCP 接入台账 ================= */
+    /**
+     * TCP 接入连接：业务系统用 nexus-client SDK 连进来交消息的那条长连接
+     *
+     * <p>与终端台账分开拉、分开渲染：字段不同（通道ID / 报文数 vs 客户端ID / 订阅模块），
+     * 数量级差三个数量级，混进一张表两边都看不清。
+     */
+    async function loadTcp() {
+        try {
+            const resp = await fetch('/ws/admin/tcp/connections');
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            tcpMeta = await resp.json();
+            tcpItems = tcpMeta.items || [];
+            $('tcpRefreshAt').textContent = new Date().toLocaleTimeString('zh-CN', {hour12: false});
+            setTip('tcpTip', '');
+            renderTcp();
+        } catch (e) {
+            setTip('tcpTip', '拉取失败：' + e.message, true);
+        }
+    }
+
+    function renderTcp() {
+        const kw = $('tcpKeyword').value.trim().toLowerCase();
+        const staleOnly = $('tcpStaleOnly').checked;
+        const list = tcpItems.filter(it =>
+            (!kw || (it.channelId || '').toLowerCase().includes(kw) || (it.ip || '').toLowerCase().includes(kw))
+            && (!staleOnly || it.stale));
+        // 只按建连时间倒序：连接个位数，不需要排序选择器
+        list.sort((a, b) => (b.createTime || 0) - (a.createTime || 0));
+
+        const stale = tcpItems.filter(it => it.stale).length;
+        setNum('tcpTotal', tcpMeta.total ?? 0);
+        $('tcpPort').textContent = tcpMeta.tcpPort ? '端口 ' + tcpMeta.tcpPort : '-';
+        const staleEl = $('tcpStaleCount');
+        setNum('tcpStaleCount', stale);
+        staleEl.className = 'num' + (stale > 0 ? ' warn' : '');
+        $('tcpHbTimeout').textContent = tcpMeta.heartbeatTimeout ? duration(tcpMeta.heartbeatTimeout) : '-';
+
+        const tbody = $('tcpBody');
+        tbody.innerHTML = '';
+        $('tcpEmpty').hidden = list.length > 0;
+        // 首屏不做「新增行」动画：一进来整页闪一遍，看着像在报警
+        const firstPaint = tcpKnownIds === null;
+        list.forEach(it => {
+            const tr = document.createElement('tr');
+            if (!firstPaint && !tcpKnownIds.has(it.channelId)) tr.className = 'row-new';
+            tr.innerHTML =
+                '<td><div class="cid">' + esc(it.channelId) + '</div>' +
+                // 协议标在 ID 下方：这条连接从哪条链进来的，一眼可判
+                '<div class="sub">' + esc(it.protocol || 'TCP') + '</div></td>' +
+                '<td><div class="cid">' + esc(it.ip) + '</div>' +
+                (isLocalIp(it.ip) ? '<div class="sub">本机</div>' : '') + '</td>' +
+                '<td>' + fmtDateTime(it.createTime) +
+                '<div class="sub">在线 ' + duration(it.online ?? 0) + '</div></td>' +
+                '<td>' + duration(it.silence) +
+                ' <span class="badge ' + (it.stale ? 'stale' : 'ok') + '">' + (it.stale ? '失联' : '在线') + '</span></td>' +
+                '<td class="sub">' + it.msgCount + '</td>';
+            tbody.appendChild(tr);
+        });
+        tcpKnownIds = new Set(tcpItems.map(it => it.channelId));
     }
 
     /* ================= 渲染 ================= */
@@ -357,6 +494,8 @@
         if (prevTotal !== null && prevTotal !== total && window.NexusFX) NexusFX.flash($('total'));
         prevTotal = total;
         setNum('total', total);
+        // 协议构成：WS 是本接口的在线数，TCP 由服务端一并带回（省得为看一眼再拉一次接口）
+        $('totalSplit').textContent = 'WS ' + total + ' · TCP ' + (meta.tcpTotal ?? 0);
         const staleEl = $('staleCount');
         setNum('staleCount', stale);
         staleEl.className = 'num' + (stale > 0 ? ' warn' : '');
@@ -693,7 +832,7 @@
     }
 
     /* ================= 页签 ================= */
-    const TABS = {conn: 'Conn', app: 'App'};
+    const TABS = {conn: 'Conn', tcp: 'Tcp', app: 'App'};
 
     function switchTab(name) {
         Object.keys(TABS).forEach(n => {
@@ -701,10 +840,13 @@
             $('tab' + TABS[n] + 'Btn').classList.toggle('active', on);
             $('tab' + TABS[n]).hidden = !on;
         });
+        // 切到 TCP 立刻拉一次：它可能上次拉取失败一直空着，也可能刚好错过了一次自动刷新
+        if (name === 'tcp') loadTcp();
     }
 
     /* ================= 启动 ================= */
     load();
+    loadTcp();
     loadApps();
     applyInterval();
     paintUptime();

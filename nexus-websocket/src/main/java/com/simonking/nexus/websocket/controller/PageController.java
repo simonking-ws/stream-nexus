@@ -49,6 +49,8 @@ public class PageController {
         model.addAttribute("title", title);
         model.addAttribute("wsPort", properties.getWsPort());
         model.addAttribute("wsPath", properties.getWsPath());
+        // TCP 接入端口：管理页要同时展示两条链的端口（终端 WS / 业务系统 TCP）
+        model.addAttribute("tcpPort", properties.getTcpPort());
         model.addAttribute("pushPath", WsConstants.PUSH_PATH);
         model.addAttribute("publicEndpoint", properties.getPublicEndpoint());
         model.addAttribute("heartbeatInterval", properties.getHeartbeatInterval().toSeconds());

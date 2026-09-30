@@ -26,6 +26,8 @@ import io.netty.handler.codec.string.StringEncoder;
 import io.netty.handler.timeout.IdleStateHandler;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -162,6 +164,11 @@ public class NexusTcpClient implements AutoCloseable {
      * </ul>
      * 两者都为空时无从路由，直接抛 {@link PushException}。
      *
+     * <p>线上报文：<code>{"event":"PUSH","bizModule":"order","action":"CREATE","data":{...}}</code>。
+     * 注意 <b>data 里放的是 {@link PushRequest} 整体</b>（{@code bizModule} / {@code clientIds} /
+     * {@code action} / {@code data} 都在里面），不是业务数据本身——服务端 PUSH 分支直接按
+     * {@code PushRequest} 反解 data，放错会收到一条 {@code ERROR} 回执。
+     *
      * <p>并发调用是安全的：{@code Channel} 的 {@code writeAndFlush} 本身线程安全，
      * 各线程写进来的报文按调用顺序排队到 EventLoop 上发送。
      *
@@ -169,18 +176,23 @@ public class NexusTcpClient implements AutoCloseable {
      * @throws PushException 参数不合法 / 连不上推送服务 / 报文序列化失败
      */
     public void push(PushRequest request) {
-        if (request == null || (!hasText(request.getBizModule()) && isEmpty(request.getClientIds()))) {
+        if (request == null || (!StringUtils.hasText(request.getBizModule()) && CollectionUtils.isEmpty(request.getClientIds()))) {
             throw new PushException("bizModule 或 clientIds 必须有一个");
         }
 
         Channel channel = activeChannel();
 
+        // data 放的是 PushRequest 整体，不是业务数据：服务端 PUSH 分支直接把 data 反解成
+        // PushRequest（bizModule / clientIds / action / data 都在里面）。
+        // 只放 request.getData() 的话，服务端拿到的是业务数据本身（比如一个字符串），
+        // 反解 PushRequest 失败会回一条 ERROR——而且 clientIds 会彻底无处安放，定向推送不可用
         NexusMessage<Object, TcpEvent> frame = NexusMessage.<Object, TcpEvent>builder()
                 .event(TcpEvent.PUSH)
+                // 报文层的 bizModule / action 是冗余副本：服务端不读，留着只为抓包排障时一眼看出推的是什么
                 .bizModule(request.getBizModule())
                 .action(request.getAction())
                 .ts(System.currentTimeMillis())
-                .data(request.getData())
+                .data(request)
                 .build();
         String payload;
         try {
@@ -406,13 +418,4 @@ public class NexusTcpClient implements AutoCloseable {
     private static String reason(Throwable cause) {
         return cause == null ? "未知原因" : String.valueOf(cause.getMessage());
     }
-
-    private static boolean hasText(String value) {
-        return value != null && !value.trim().isEmpty();
-    }
-
-    private static boolean isEmpty(List<?> list) {
-        return list == null || list.isEmpty();
-    }
-
 }
