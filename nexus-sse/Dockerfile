@@ -3,7 +3,7 @@
 # 构建上下文必须是仓库根目录（而不是 nexus-sse/）：
 # nexus-sse 的父 POM 在根目录，且它依赖 nexus-common，根目录打包才能一次带上
 # 所以在仓库根目录执行（本文件移到 nexus-sse/ 后用 -f 指定）：
-#   docker build -f nexus-sse/Dockerfile -t stream-nexus:1.0.0 .
+#   docker build -f nexus-sse/Dockerfile -t nexus-sse:1.0.0 .
 # 或直接用 nexus-sse/scripts/docker-build.sh | nexus-sse/scripts/docker-build.cmd
 
 FROM maven:3.9-eclipse-temurin-17 AS build

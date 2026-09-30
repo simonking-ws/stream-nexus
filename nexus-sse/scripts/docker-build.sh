@@ -5,7 +5,7 @@
 # 脚本会自动切到根目录，再用 -f nexus-sse/Dockerfile 指定本模块的 Dockerfile。
 #
 # 可选环境变量：
-#   IMAGE_NAME   镜像名，默认 simonking/stream-nexus
+#   IMAGE_NAME   镜像名，默认 simonking/nexus-sse
 #   IMAGE_TAG    镜像标签，默认 1.0.0
 #   JAR_VERSION  jar 版本号，默认 1.0.0（需与 pom.xml 的 <version> 一致）
 #
@@ -17,7 +17,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
-IMAGE_NAME="${IMAGE_NAME:-simonking/stream-nexus}"
+IMAGE_NAME="${IMAGE_NAME:-simonking/nexus-sse}"
 IMAGE_TAG="${IMAGE_TAG:-1.0.0}"
 JAR_VERSION="${JAR_VERSION:-1.0.0}"
 

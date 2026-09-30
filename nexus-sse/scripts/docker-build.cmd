@@ -5,7 +5,7 @@ REM 构建上下文必须是仓库根目录（nexus-sse 的父 POM 在根目录�
 REM 脚本会自动切到根目录，再用 -f nexus-sse\Dockerfile 指定本模块的 Dockerfile。
 REM
 REM 可选环境变量：
-REM   IMAGE_NAME   镜像名，默认 simonking/stream-nexus
+REM   IMAGE_NAME   镜像名，默认 simonking/nexus-sse
 REM   IMAGE_TAG    镜像标签，默认 1.0.0
 REM   JAR_VERSION  jar 版本号，默认 1.0.0（需与 pom.xml 的 <version> 一致）
 REM
@@ -14,7 +14,7 @@ REM   nexus-sse\scripts\docker-build.cmd
 REM   set IMAGE_TAG=v1.2.0 && nexus-sse\scripts\docker-build.cmd
 
 setlocal
-if "%IMAGE_NAME%"=="" set IMAGE_NAME=simonking/stream-nexus
+if "%IMAGE_NAME%"=="" set IMAGE_NAME=simonking/nexus-sse
 if "%IMAGE_TAG%"=="" set IMAGE_TAG=1.0.0
 if "%JAR_VERSION%"=="" set JAR_VERSION=1.0.0
 

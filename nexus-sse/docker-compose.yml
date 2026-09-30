@@ -8,12 +8,12 @@
 # nexus.sse.connect-auth-enabled -> NEXUS_SSE_CONNECT_AUTH_ENABLED）。
 
 services:
-  stream-nexus:
+  nexus-sse:
     build:
       context: ..
       dockerfile: nexus-sse/Dockerfile
-    image: simonking/stream-nexus:1.0.0
-    container_name: stream-nexus
+    image: simonking/nexus-sse:1.0.0
+    container_name: nexus-sse
     restart: unless-stopped
     ports:
       - "8088:8088"

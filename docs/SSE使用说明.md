@@ -241,7 +241,7 @@ docker compose up -d --build
 
 # 方式二：先打镜像再跑
 ./scripts/docker-build.sh       # Windows: scripts\docker-build.cmd
-docker run -d --name stream-nexus -p 8088:8088 simonking/stream-nexus:1.0.0
+docker run -d --name nexus-sse -p 8088:8088 simonking/nexus-sse:1.0.0
 
 docker compose logs -f          # 看日志
 docker compose down             # 停掉
