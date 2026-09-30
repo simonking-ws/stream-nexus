@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.simonking.nexus.ws.client.exception.PushException;
+import com.simonking.stream.nexus.common.constant.NexusConstants;
 import com.simonking.stream.nexus.common.constant.SseConstants;
 import com.simonking.stream.nexus.common.constant.WsConstants;
 import com.simonking.stream.nexus.common.model.PushRequest;
@@ -16,6 +17,8 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
 
 import java.io.IOException;
 import java.util.List;
@@ -77,22 +80,6 @@ public class NexusRestClient implements AutoCloseable {
     /** 默认 WebSocket 服务地址：本机起的 nexus-websocket，端口取自 {@link WsConstants#HTTP_PORT} */
     private static final String DEFAULT_WS_BASE_URL = "http://127.0.0.1:" + WsConstants.HTTP_PORT;
 
-    /**
-     * nexus-sse 内置默认应用（见其 {@code PushAppRegistry}）：开箱即用，生产环境务必换成管理页下发的应用。
-     *
-     * <p>白名单只有 {@code test} 模块，推别的 bizModule 会被鉴权拦下——这是默认应用的刻意限制。
-     */
-    private static final String DEFAULT_SSE_APP_ID = "test-demo";
-
-    private static final String DEFAULT_SSE_API_KEY = "c3RyZWFtLW5leHVz";
-
-    /**
-     * nexus-websocket 内置默认应用（见其 {@code PushAppRegistry}）：与 SSE 侧是两套独立注册表
-     */
-    private static final String DEFAULT_WS_APP_ID = "test-demo";
-
-    private static final String DEFAULT_WS_API_KEY = "c3RyZWFtLW5leHVz";
-
     /** 错误响应体在异常消息里最多保留这么长：网关的错误页动辄几十 KB，不该整页灌进日志 */
     private static final int MAX_ERROR_BODY_LENGTH = 512;
 
@@ -110,11 +97,11 @@ public class NexusRestClient implements AutoCloseable {
 
     /** SSE 推送应用ID：由 nexus-sse 管理界面「推送应用」页签下发 */
     @Builder.Default
-    private String sseAppId = DEFAULT_SSE_APP_ID;
+    private String sseAppId = NexusConstants.DEFAULT_APP_ID;
 
     /** SSE 推送应用密钥，与 {@code sseAppId} 配对 */
     @Builder.Default
-    private String sseApiKey = DEFAULT_SSE_API_KEY;
+    private String sseApiKey = NexusConstants.DEFAULT_API_KEY;
 
     /**
      * WebSocket 服务根地址，如 {@code http://10.0.0.8:8089}（{@code nexus-websocket} 的 {@code server.port}）
@@ -126,11 +113,11 @@ public class NexusRestClient implements AutoCloseable {
 
     /** WebSocket 推送应用ID：由 nexus-websocket 管理界面「推送应用」页签下发 */
     @Builder.Default
-    private String wsAppId = DEFAULT_WS_APP_ID;
+    private String wsAppId = NexusConstants.DEFAULT_APP_ID;
 
     /** WebSocket 推送应用密钥，与 {@code wsAppId} 配对 */
     @Builder.Default
-    private String wsApiKey = DEFAULT_WS_API_KEY;
+    private String wsApiKey = NexusConstants.DEFAULT_API_KEY;
 
     // ==================================================================================
     // 运行期状态：final + 就地初始化，@Builder 不会把它们塞进 builder
@@ -206,7 +193,7 @@ public class NexusRestClient implements AutoCloseable {
         if (closed.get()) {
             throw new PushException("客户端已关闭，不能重复使用");
         }
-        if (request == null || (!hasText(request.getBizModule()) && isEmpty(request.getClientIds()))) {
+        if (request == null || (!StringUtils.hasText(request.getBizModule()) && CollectionUtils.isEmpty(request.getClientIds()))) {
             throw new PushException("bizModule 或 clientIds 必须有一个");
         }
         final String url = pushUrl(channel, baseUrl, pushPath);
@@ -232,7 +219,7 @@ public class NexusRestClient implements AutoCloseable {
                 throw new PushException(channel + " 推送失败: HTTP " + response.code() + " " + response.message()
                         + " -> " + truncate(responseBody));
             }
-            if (!hasText(responseBody)) {
+            if (!StringUtils.hasText(responseBody)) {
                 throw new PushException(channel + " 推送失败: 服务端返回空响应体");
             }
             try {
@@ -247,7 +234,7 @@ public class NexusRestClient implements AutoCloseable {
     }
 
     private String pushUrl(String channel, String baseUrl, String pushPath) {
-        if (!hasText(baseUrl)) {
+        if (!StringUtils.hasText(baseUrl)) {
             throw new PushException(channel + " baseUrl 不能为空");
         }
         String root = baseUrl.trim();
@@ -277,13 +264,4 @@ public class NexusRestClient implements AutoCloseable {
                 ? text
                 : text.substring(0, MAX_ERROR_BODY_LENGTH) + "...(已截断)";
     }
-
-    private static boolean hasText(String value) {
-        return value != null && !value.trim().isEmpty();
-    }
-
-    private static boolean isEmpty(List<?> list) {
-        return list == null || list.isEmpty();
-    }
-
 }

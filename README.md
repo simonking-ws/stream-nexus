@@ -44,6 +44,7 @@
 | 推送鉴权 | `X-Sse-AppId` + `X-Sse-Key` / `X-Ws-AppId` + `X-Ws-Key` 配对校验，并按应用限制模块白名单 |
 | 运维接口 | 在线连接查询与强制下线；推送应用 `appId`/`key` 的运行时增删（SSE 落盘，WebSocket 仅内存） |
 | 内置页面 | `/admin` 连接台账 + 应用管理，`/console` 推送测试页 |
+| 自定义连接测试 | `/console` 测试页自带「自定义连接地址」模式：默认走系统地址（自动拼接订阅模块与建连令牌），切到自定义后直接填**外部 SSE / WebSocket 链接**、点「连接」即以输入框地址建连，用来测外部流式服务；外部服务不认本服务的模块订阅与建连令牌，切到自定义后这些输入框一并隐藏。SSE 侧另有「监听事件」标签（`MESSAGE` / `message` / 自定义事件名），兼容不带事件名的外部 SSE 流 |
 | 管理页登录 | SSE 的 `/admin`、`/console` 与 `/sse/admin/**` 需 session 登录，默认账号 `admin` / `adminsse`；WebSocket 管理页当前开放，生产环境建议限制内网访问 |
 
 ---
@@ -201,6 +202,8 @@ WebSocket 通道（`nexus-websocket`，端口 8089）开箱自带两个页面，
 2. 保持默认订阅模块 `test`，点「推送」→ 命中 `total=1`，页面收到 `test:bid` 消息。
 3. 打开 WebSocket 测试页 `http://localhost:8089/console`，同样点击「连接」并「推送」。
 4. 观察日志每 15s 收到一次 `PING`，客户端回 `PONG`。
+
+> **测外部连接**：两个测试页均可点「自定义连接地址」切到手填模式，把地址框改成任意外部流式链接（如 `https://host/sse/subscribe` 或 `wss://host/ws`）后点「连接」，即可验证外部 SSE / WebSocket 服务的连通性与消息到达；外部 SSE 若不带事件名，在「监听事件」里改用 `message` 或新增自定义事件名即可。点「重置」回到系统默认地址。
 
 ---
 

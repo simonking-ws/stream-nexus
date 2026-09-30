@@ -43,6 +43,13 @@ public class AdminController {
 
     private static final long START_TIME = ManagementFactory.getRuntimeMXBean().getStartTime();
 
+    /**
+     * 台账里的协议标识：页面据此区分一条连接是终端的 WebSocket 长连接，
+     * 还是业务系统侧的 TCP 长连接
+     */
+    private static final String PROTOCOL_WS = "WS";
+    private static final String PROTOCOL_TCP = "TCP";
+
     private final WsClientRegistry registry;
 
     private final PushAppRegistry appRegistry;
@@ -80,6 +87,10 @@ public class AdminController {
         result.put("maxConnections", properties.getMaxConnections());
         result.put("wsPort", properties.getWsPort());
         result.put("wsPath", properties.getWsPath());
+        // 协议标识 + TCP 侧的口径：概览要给出「WS / TCP」构成，页面不必为看一眼再拉一次 TCP 接口
+        result.put("protocol", PROTOCOL_WS);
+        result.put("tcpPort", properties.getTcpPort());
+        result.put("tcpTotal", tcpRegistry.size());
         result.put("items", items);
         return result;
     }
@@ -98,6 +109,8 @@ public class AdminController {
             items.add(toTcpView(client, now));
         }
         Map<String, Object> result = new LinkedHashMap<>();
+        result.put("protocol", PROTOCOL_TCP);
+        result.put("serverTime", now);
         result.put("total", tcpRegistry.size());
         result.put("tcpPort", properties.getTcpPort());
         result.put("maxConnections", properties.getMaxConnections());
@@ -252,6 +265,9 @@ public class AdminController {
     private Map<String, Object> toTcpView(TcpClient client, long now) {
         long silence = Math.max(now - client.getLastPongTime(), 0);
         Map<String, Object> view = new LinkedHashMap<>();
+        // 协议标识：TCP 台账与终端台账字段不同（通道ID / 报文数 vs 客户端ID / 订阅模块），
+        // 前端合并展示或筛选时靠它区分
+        view.put("protocol", PROTOCOL_TCP);
         view.put("channelId", client.getChannelId());
         view.put("ip", client.getIp() == null ? "-" : client.getIp());
         view.put("createTime", client.getCreateTime());
@@ -267,6 +283,7 @@ public class AdminController {
     private Map<String, Object> toView(WsClient client, long now, long heartbeatTimeout) {
         long silence = Math.max(now - client.getLastPongTime(), 0);
         Map<String, Object> view = new LinkedHashMap<>();
+        view.put("protocol", PROTOCOL_WS);
         view.put("clientId", client.getClientId());
         view.put("ip", client.getIp() == null ? "-" : client.getIp());
         view.put("city", ipLocation.city(client.getIp()));
